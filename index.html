@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QR হাজিরা স্ক্যানার</title>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<!-- PDF তৈরির জন্য jsPDF এবং html2pdf লাইব্রেরি -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -44,6 +46,8 @@
   .btn-start:hover { background: #059669; }
   .btn-stop { background: #ef4444; color: white; }
   .btn-stop:hover { background: #dc2626; }
+  .btn-pdf { background: #3b82f6; color: white; margin-top: 10px; }
+  .btn-pdf:hover { background: #2563eb; }
   .btn:disabled { background: #475569; cursor: not-allowed; }
 
   #status {
@@ -62,6 +66,26 @@
   .log-time { color: #94a3b8; font-size: 11px; }
 
   .badge { font-size: 12px; padding: 2px 8px; border-radius: 20px; background: #334155; color: #cbd5e1; }
+  
+  /* PDF প্রিন্ট টেমপ্লেট স্টাইল (হিডেন) */
+  #pdfTemplate {
+    display: none;
+    background: #fff;
+    color: #000;
+    padding: 20px;
+    font-family: Arial, sans-serif;
+  }
+  #pdfTemplate table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+  }
+  #pdfTemplate th, #pdfTemplate td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+  }
+  #pdfTemplate th { background-color: #f2f2f2; }
 </style>
 </head>
 <body>
@@ -92,25 +116,42 @@
       <span class="badge" id="countBadge">0 জন</span>
     </div>
     <div id="log"><p style="color:#64748b; font-size:13px;">এখনও কোনো স্ক্যান হয়নি।</p></div>
+    
+    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()" disabled>📄 PDF রিপোর্ট ডাউনলোড করুন</button>
   </div>
 </div>
 
+<!-- PDF রিপোর্ট টেমপ্লেট -->
+<div id="pdfTemplate">
+  <h2 style="text-align:center; color:#000;">হাজিরা রিপোর্ট</h2>
+  <hr>
+  <p><strong>সেশন:</strong> <span id="pdfSession"></span></p>
+  <p><strong>তারিখ:</strong> <span id="pdfDate"></span></p>
+  <p><strong>মোট হাজিরা:</strong> <span id="pdfTotal"></span> জন</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ক্রমিক</th>
+        <th>রোল নম্বর</th>
+        <th>সময়</th>
+        <th>স্ট্যাটাস</th>
+      </tr>
+    </thead>
+    <tbody id="pdfTableBody"></tbody>
+  </table>
+</div>
+
 <script>
-/* ============================================================
-   ⚙️ কনফিগারেশন — এখানে নিজের Apps Script Web App এর URL বসান
-   (Deploy > New deployment > Web app > Execute as: Me,
-    Who has access: Anyone — তারপর /exec দিয়ে শেষ হওয়া লিংকটা কপি করুন)
-   ============================================================ */
 const API_URL = "https://script.google.com/macros/s/AKfycbxxa5KzVMEIIulDcy4MUoMZigiCwcktoyk1JymCDtLPIc25lmDUIy3UMZJpJdQSor1-Ug/exec";
 
 let html5QrCode = null;
 let isProcessing = false;
 let scannedCount = 0;
-const recentScans = {}; // roll -> timestamp, একই রোল বারবার স্ক্যান ঠেকাতে
 
-// ---------- API কল হেল্পার ----------
-// Content-Type: text/plain রাখা হচ্ছে ইচ্ছাকৃতভাবে, যাতে ব্রাউজার
-// প্রি-ফ্লাইট OPTIONS রিকোয়েস্ট না পাঠায় (Apps Script তা হ্যান্ডেল করে না)
+// সফলভাবে হাজিরা হওয়া রোলগুলোর রেকর্ড রাখা (ডুপ্লিকেট চেক করতে)
+const completedRolls = new Set();
+const scanHistoryData = []; // PDF রিপোর্টের জন্য ডেটা জমানো
+
 async function callApi(payload) {
   const res = await fetch(API_URL, {
     method: "POST",
@@ -121,7 +162,6 @@ async function callApi(payload) {
   return res.json();
 }
 
-// ---------- সেশন লোড ----------
 window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('attDate').valueAsDate = new Date();
   try {
@@ -143,7 +183,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// ---------- স্ক্যানার শুরু ----------
 function startScanner() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
@@ -160,7 +199,7 @@ function startScanner() {
     { facingMode: "environment" },
     config,
     onScanSuccess,
-    () => {} // স্ক্যান না পেলে চুপচাপ থাকবে
+    () => {}
   ).then(() => {
     document.getElementById("startBtn").style.display = "none";
     document.getElementById("stopBtn").style.display = "block";
@@ -171,7 +210,6 @@ function startScanner() {
   });
 }
 
-// ---------- স্ক্যানার বন্ধ ----------
 function stopScanner() {
   if (html5QrCode) {
     html5QrCode.stop().then(() => {
@@ -184,21 +222,21 @@ function stopScanner() {
   }
 }
 
-// ---------- স্ক্যান সাকসেস হ্যান্ডলার ----------
 async function onScanSuccess(decodedText) {
   if (isProcessing) return;
 
-  // QR কোডে হয়তো শুধু রোল নম্বর আছে, অথবা JSON — দুটোই হ্যান্ডেল করা
   let roll = decodedText.trim();
   try {
     const parsed = JSON.parse(decodedText);
     if (parsed && parsed.roll) roll = parsed.roll.toString();
-  } catch (e) { /* প্লেইন টেক্সট রোল নম্বর, সমস্যা নেই */ }
+  } catch (e) {}
 
-  // একই রোল ৫ সেকেন্ডের মধ্যে আবার স্ক্যান হলে বাদ দেওয়া (ক্যামেরা কন্টিনিউয়াস রিড করে)
-  const now = Date.now();
-  if (recentScans[roll] && (now - recentScans[roll]) < 5000) return;
-  recentScans[roll] = now;
+  // 🔴 ডুপ্লিকেট স্ক্যান চেকার (এই সেশনে আগেই স্ক্যান হলে ব্লক করবে)
+  if (completedRolls.has(roll)) {
+    beepError();
+    showStatus(`⚠️ রোল ${roll} ইতিমধ্যে স্ক্যান করা হয়েছে! (ডুপ্লিকেট)`, "warn");
+    return;
+  }
 
   isProcessing = true;
   if (html5QrCode) html5QrCode.pause(true);
@@ -214,9 +252,16 @@ async function onScanSuccess(decodedText) {
     if (resp.success) {
       const msg = resp.data;
       if (msg.includes("সফল") && !msg.includes("পাওয়া যায়নি") && !msg.includes("আগে হয়েছে")) {
+        completedRolls.add(roll); // সফল রিকর্ড সেট-এ সেভ রাখা
+        
+        const scanTime = new Date().toLocaleTimeString('bn-BD');
+        scanHistoryData.push({ roll: roll, time: scanTime, status: "সফল" });
+
         addLog(roll, "✅ হাজিরা সম্পন্ন — রোল " + roll, "ok");
         showStatus("✅ রোল " + roll + " — হাজিরা সফল হয়েছে", "ok");
+        document.getElementById("pdfBtn").disabled = false; // PDF বাটন অ্যাক্টিভ
       } else if (msg.includes("আগে হয়েছে")) {
+        completedRolls.add(roll); // আগেই সার্ভারে হয়ে থাকলে সেট করে রাখা
         addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
         showStatus("⚠️ রোল " + roll + " — আগেই হাজিরা দেওয়া হয়েছে", "warn");
       } else {
@@ -238,7 +283,6 @@ async function onScanSuccess(decodedText) {
   }, 1200);
 }
 
-// ---------- UI হেল্পার ----------
 function showStatus(text, type) {
   const el = document.getElementById("status");
   el.style.display = "block";
@@ -256,7 +300,7 @@ function showStatus(text, type) {
 
 function addLog(roll, text, type) {
   scannedCount++;
-  document.getElementById("countBadge").innerText = scannedCount + " জন";
+  document.getElementById("countBadge").innerText = completedRolls.size + " জন (সফল)";
   const log = document.getElementById("log");
   if (scannedCount === 1) log.innerHTML = "";
   const item = document.createElement("div");
@@ -277,6 +321,63 @@ function beep() {
     osc.start();
     osc.stop(ctx.currentTime + 0.12);
   } catch (e) {}
+}
+
+function beepError() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 300; // লো ফ্রিকোয়েন্সি সাউন্ড ওয়ার্নিংয়ের জন্য
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch (e) {}
+}
+
+// ---------- PDF তৈরি করার ফাংশন ----------
+function generatePDF() {
+  if (scanHistoryData.length === 0) {
+    alert("ডাউনলোড করার মতো কোনো হাজিরা ডেটা নেই!");
+    return;
+  }
+
+  const session = document.getElementById("sessionDrop").value;
+  const date = document.getElementById("attDate").value;
+
+  document.getElementById("pdfSession").innerText = session;
+  document.getElementById("pdfDate").innerText = date;
+  document.getElementById("pdfTotal").innerText = scanHistoryData.length;
+
+  const tableBody = document.getElementById("pdfTableBody");
+  tableBody.innerHTML = "";
+
+  scanHistoryData.forEach((item, index) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${index + 1}</td>
+      <td>${item.roll}</td>
+      <td>${item.time}</td>
+      <td>${item.status}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+
+  const element = document.getElementById("pdfTemplate");
+  element.style.display = "block"; // প্রিন্ট তৈরি করার আগে দৃশ্যমান করা
+
+  const opt = {
+    margin:       10,
+    filename:     `Attendance_${session}_${date}.pdf`,
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 2 },
+    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  html2pdf().set(opt).from(element).save().then(() => {
+    element.style.display = "none"; // ডাউনলোড শেষে আবার হাইড করে দেওয়া
+  });
 }
 </script>
 </body>
