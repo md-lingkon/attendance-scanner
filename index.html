@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR হাজিরা স্ক্যানার</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'SolaimanLipi', Arial, sans-serif;
+    background: #0f172a;
+    margin: 0;
+    padding: 16px;
+    color: #e2e8f0;
+    display: flex;
+    justify-content: center;
+  }
+  .wrap { width: 100%; max-width: 480px; }
+  h2 { text-align: center; color: #fff; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 20px; }
+
+  .card {
+    background: #1e293b;
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  }
+
+  label { display: block; margin-bottom: 6px; font-weight: bold; color: #cbd5e1; font-size: 14px; }
+  select, input {
+    width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #334155;
+    background: #0f172a; color: #fff; font-size: 15px; margin-bottom: 12px;
+  }
+
+  #reader { width: 100%; border-radius: 10px; overflow: hidden; }
+
+  .btn {
+    width: 100%; padding: 14px; border: none; border-radius: 10px;
+    font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s;
+  }
+  .btn-start { background: #10b981; color: white; }
+  .btn-start:hover { background: #059669; }
+  .btn-stop { background: #ef4444; color: white; }
+  .btn-stop:hover { background: #dc2626; }
+  .btn:disabled { background: #475569; cursor: not-allowed; }
+
+  #status {
+    margin-top: 14px; padding: 12px; border-radius: 8px; text-align: center;
+    font-weight: bold; display: none; white-space: pre-wrap;
+  }
+
+  #log { max-height: 220px; overflow-y: auto; }
+  .log-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px; border-radius: 8px; margin-bottom: 8px; font-size: 14px;
+  }
+  .log-ok { background: rgba(16,185,129,0.15); border-left: 4px solid #10b981; }
+  .log-err { background: rgba(239,68,68,0.15); border-left: 4px solid #ef4444; }
+  .log-warn { background: rgba(245,158,11,0.15); border-left: 4px solid #f59e0b; }
+  .log-time { color: #94a3b8; font-size: 11px; }
+
+  .badge { font-size: 12px; padding: 2px 8px; border-radius: 20px; background: #334155; color: #cbd5e1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>📷 QR হাজিরা স্ক্যানার</h2>
+  <div class="subtitle">স্ট্যান্ডঅ্যালোন পেজ · Apps Script API দিয়ে সংযুক্ত</div>
+
+  <div class="card">
+    <label>সেশন সিলেক্ট করুন</label>
+    <select id="sessionDrop"><option value="">লোড হচ্ছে...</option></select>
+
+    <label>তারিখ</label>
+    <input type="date" id="attDate">
+
+    <div id="reader"></div>
+
+    <div style="margin-top:14px; display:flex; gap:10px;">
+      <button class="btn btn-start" id="startBtn" onclick="startScanner()">স্ক্যান শুরু করুন</button>
+      <button class="btn btn-stop" id="stopBtn" onclick="stopScanner()" style="display:none;">থামান</button>
+    </div>
+
+    <div id="status"></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <label style="margin:0;">সাম্প্রতিক স্ক্যান</label>
+      <span class="badge" id="countBadge">0 জন</span>
+    </div>
+    <div id="log"><p style="color:#64748b; font-size:13px;">এখনও কোনো স্ক্যান হয়নি।</p></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ⚙️ কনফিগারেশন — এখানে নিজের Apps Script Web App এর URL বসান
+   (Deploy > New deployment > Web app > Execute as: Me,
+    Who has access: Anyone — তারপর /exec দিয়ে শেষ হওয়া লিংকটা কপি করুন)
+   ============================================================ */
+const API_URL = "https://script.google.com/macros/s/আপনার-ডিপ্লয়মেন্ট-আইডি/exec";
+
+let html5QrCode = null;
+let isProcessing = false;
+let scannedCount = 0;
+const recentScans = {}; // roll -> timestamp, একই রোল বারবার স্ক্যান ঠেকাতে
+
+// ---------- API কল হেল্পার ----------
+// Content-Type: text/plain রাখা হচ্ছে ইচ্ছাকৃতভাবে, যাতে ব্রাউজার
+// প্রি-ফ্লাইট OPTIONS রিকোয়েস্ট না পাঠায় (Apps Script তা হ্যান্ডেল করে না)
+async function callApi(payload) {
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+
+// ---------- সেশন লোড ----------
+window.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('attDate').valueAsDate = new Date();
+  try {
+    const resp = await callApi({ action: "getSessions" });
+    const drop = document.getElementById("sessionDrop");
+    drop.innerHTML = '<option value="">-- সেশন বেছে নিন --</option>';
+    if (resp.success && Array.isArray(resp.data)) {
+      resp.data.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s; opt.text = s;
+        drop.add(opt);
+      });
+    } else {
+      drop.innerHTML = '<option value="">সেশন লোড ব্যর্থ হয়েছে</option>';
+    }
+  } catch (e) {
+    document.getElementById("sessionDrop").innerHTML = '<option value="">সার্ভারে সংযোগ ব্যর্থ</option>';
+    console.error(e);
+  }
+});
+
+// ---------- স্ক্যানার শুরু ----------
+function startScanner() {
+  const session = document.getElementById("sessionDrop").value;
+  const date = document.getElementById("attDate").value;
+
+  if (!session || !date) {
+    showStatus("⚠️ প্রথমে সেশন ও তারিখ সিলেক্ট করুন!", "warn");
+    return;
+  }
+
+  html5QrCode = new Html5Qrcode("reader");
+  const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+  html5QrCode.start(
+    { facingMode: "environment" },
+    config,
+    onScanSuccess,
+    () => {} // স্ক্যান না পেলে চুপচাপ থাকবে
+  ).then(() => {
+    document.getElementById("startBtn").style.display = "none";
+    document.getElementById("stopBtn").style.display = "block";
+    document.getElementById("sessionDrop").disabled = true;
+    document.getElementById("attDate").disabled = true;
+  }).catch(err => {
+    showStatus("❌ ক্যামেরা চালু করা যায়নি: " + err, "err");
+  });
+}
+
+// ---------- স্ক্যানার বন্ধ ----------
+function stopScanner() {
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      html5QrCode.clear();
+      document.getElementById("startBtn").style.display = "block";
+      document.getElementById("stopBtn").style.display = "none";
+      document.getElementById("sessionDrop").disabled = false;
+      document.getElementById("attDate").disabled = false;
+    });
+  }
+}
+
+// ---------- স্ক্যান সাকসেস হ্যান্ডলার ----------
+async function onScanSuccess(decodedText) {
+  if (isProcessing) return;
+
+  // QR কোডে হয়তো শুধু রোল নম্বর আছে, অথবা JSON — দুটোই হ্যান্ডেল করা
+  let roll = decodedText.trim();
+  try {
+    const parsed = JSON.parse(decodedText);
+    if (parsed && parsed.roll) roll = parsed.roll.toString();
+  } catch (e) { /* প্লেইন টেক্সট রোল নম্বর, সমস্যা নেই */ }
+
+  // একই রোল ৫ সেকেন্ডের মধ্যে আবার স্ক্যান হলে বাদ দেওয়া (ক্যামেরা কন্টিনিউয়াস রিড করে)
+  const now = Date.now();
+  if (recentScans[roll] && (now - recentScans[roll]) < 5000) return;
+  recentScans[roll] = now;
+
+  isProcessing = true;
+  if (html5QrCode) html5QrCode.pause(true);
+
+  const session = document.getElementById("sessionDrop").value;
+  const date = document.getElementById("attDate").value;
+
+  showStatus("⏳ রোল " + roll + " প্রসেস হচ্ছে...", "info");
+  beep();
+
+  try {
+    const resp = await callApi({ action: "markAttendance", roll: roll, session: session, date: date });
+    if (resp.success) {
+      const msg = resp.data;
+      if (msg.includes("সফল") && !msg.includes("পাওয়া যায়নি") && !msg.includes("আগে হয়েছে")) {
+        addLog(roll, "✅ হাজিরা সম্পন্ন — রোল " + roll, "ok");
+        showStatus("✅ রোল " + roll + " — হাজিরা সফল হয়েছে", "ok");
+      } else if (msg.includes("আগে হয়েছে")) {
+        addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
+        showStatus("⚠️ রোল " + roll + " — আগেই হাজিরা দেওয়া হয়েছে", "warn");
+      } else {
+        addLog(roll, "❌ রোল খুঁজে পাওয়া যায়নি — রোল " + roll, "err");
+        showStatus("❌ রোল " + roll + " — সেশনে পাওয়া যায়নি", "err");
+      }
+    } else {
+      addLog(roll, "❌ এরর: " + resp.error, "err");
+      showStatus("❌ এরর: " + resp.error, "err");
+    }
+  } catch (e) {
+    addLog(roll, "❌ সার্ভারে সংযোগ ব্যর্থ", "err");
+    showStatus("❌ সার্ভারে সংযোগ ব্যর্থ হয়েছে", "err");
+  }
+
+  setTimeout(() => {
+    isProcessing = false;
+    if (html5QrCode) html5QrCode.resume();
+  }, 1200);
+}
+
+// ---------- UI হেল্পার ----------
+function showStatus(text, type) {
+  const el = document.getElementById("status");
+  el.style.display = "block";
+  el.innerText = text;
+  const colors = {
+    ok: ["#d1fae5", "#065f46"],
+    err: ["#fee2e2", "#991b1b"],
+    warn: ["#fef3c7", "#92400e"],
+    info: ["#e0f2fe", "#075985"]
+  };
+  const [bg, color] = colors[type] || colors.info;
+  el.style.background = bg;
+  el.style.color = color;
+}
+
+function addLog(roll, text, type) {
+  scannedCount++;
+  document.getElementById("countBadge").innerText = scannedCount + " জন";
+  const log = document.getElementById("log");
+  if (scannedCount === 1) log.innerHTML = "";
+  const item = document.createElement("div");
+  item.className = "log-item log-" + type;
+  const time = new Date().toLocaleTimeString('bn-BD');
+  item.innerHTML = `<span>${text}</span><span class="log-time">${time}</span>`;
+  log.prepend(item);
+}
+
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.12);
+  } catch (e) {}
+}
+</script>
+</body>
+</html>
