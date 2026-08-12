@@ -103,9 +103,10 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbwBtxX_fGgTE3e9XNWMBpAeD8U5kY3JKf8AadU8Ra9lQEjjq5CURufn_XxHCDdmdgfXVQ/exec";
 
 let html5QrCode = null;
-let isProcessing = false;
 let scannedCount = 0;
 
+// প্রসেসিং অবস্থায় থাকা রোল ও শেষ স্ক্যান টাইমের রেকর্ড
+const activeProcessingRolls = new Set();
 const completedRolls = new Set();
 const scanHistoryData = [];
 
@@ -120,7 +121,6 @@ async function callApi(payload) {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-  // আজকের তারিখ সেট করা
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('attDate').value = today;
 
@@ -153,7 +153,7 @@ function startScanner() {
   }
 
   html5QrCode = new Html5Qrcode("reader");
-  const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+  const config = { fps: 15, qrbox: { width: 250, height: 250 } };
 
   html5QrCode.start(
     { facingMode: "environment" },
@@ -165,7 +165,7 @@ function startScanner() {
     document.getElementById("stopBtn").style.display = "block";
     document.getElementById("sessionDrop").disabled = true;
     document.getElementById("attDate").disabled = true;
-    showStatus("📷 ক্যামেরা চালু হয়েছে। QR কোড স্ক্যান করুন...", "info");
+    showStatus("📷 স্ক্যানার রেডি! একের পর এক স্ক্যান করতে থাকুন...", "info");
   }).catch(err => {
     showStatus("❌ ক্যামেরা চালু করা যায়নি: " + err, "err");
   });
@@ -184,68 +184,66 @@ function stopScanner() {
   }
 }
 
-/**
- * QR কোড পার্সিং উন্নত লজিক (JSON, Structured String বা Direct Roll সাপোর্ট করে)
- */
 function extractRollNumber(decodedText) {
   if (!decodedText) return null;
   let text = decodedText.trim();
 
-  // ১. JSON চেক
   try {
     const parsed = JSON.parse(text);
     if (parsed && parsed.roll) return parsed.roll.toString().trim();
   } catch (e) {}
 
-  // ২. যদি "|" সেপারেটেড স্ট্রিং হয় (যেমন: Name|101|Session)
   if (text.includes("|")) {
     const parts = text.split("|");
     for (let part of parts) {
       let trimmed = part.trim();
-      if (/^\d+$/.test(trimmed)) {
-        return trimmed;
-      }
+      if (/^\d+$/.test(trimmed)) return trimmed;
     }
   }
 
-  // ৩. যদি সরাসরি শুধুমাত্র সংখ্যা থাকে
   const digitsMatch = text.match(/\b\d+\b/);
-  if (digitsMatch) {
-    return digitsMatch[0];
-  }
+  if (digitsMatch) return digitsMatch[0];
 
   return text;
 }
 
-async function onScanSuccess(decodedText) {
-  if (isProcessing) return;
-
+/**
+ * ⚡ দ্রুত অটোমেটিক স্ক্যান লজিক (Camera Pause হবে না)
+ */
+function onScanSuccess(decodedText) {
   const roll = extractRollNumber(decodedText);
 
-  if (!roll) {
-    beepError();
-    showStatus("⚠️ QR কোড থেকে রোল নম্বর পাওয়া যায়নি!", "warn");
-    return;
-  }
+  if (!roll) return;
 
-  // ক্লায়েন্ট-সাইড ডুপ্লিকেট চেক
+  // ১. যদি ইতোমধ্যে সফল হাজিরা দেওয়া হয়ে থাকে
   if (completedRolls.has(roll)) {
     beepError();
-    showStatus(`⚠️ রোল ${roll} ইতিমধ্যে স্ক্যান করা হয়েছে! (ডুপ্লিকেট)`, "warn");
+    showStatus(`⚠️ রোল ${roll} ইতিমধ্যে স্ক্যান করা হয়েছে!`, "warn");
     return;
   }
 
-  isProcessing = true;
-  if (html5QrCode) html5QrCode.pause(true);
+  // ২. যদি ব্যাকগ্রাউন্ডে প্রসেসিং অবস্থায় থাকে
+  if (activeProcessingRolls.has(roll)) {
+    return; 
+  }
+
+  // প্রসেসিং সেটে রোলটি মার্ক করা
+  activeProcessingRolls.add(roll);
+  beep();
 
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
 
   showStatus("⏳ রোল " + roll + " প্রসেস হচ্ছে...", "info");
-  beep();
 
+  // ব্যাকগ্রাউন্ডে অটো প্রসেস করা (ক্যামেরা চালু থাকবে)
+  processAttendanceAsync(roll, session, date);
+}
+
+async function processAttendanceAsync(roll, session, date) {
   try {
     const resp = await callApi({ action: "markAttendance", roll: roll, session: session, date: date });
+    
     if (resp.success) {
       const msg = resp.data;
       if (msg.includes("সফল") && !msg.includes("পাওয়া যায়নি") && !msg.includes("আগে হয়েছে")) {
@@ -273,15 +271,13 @@ async function onScanSuccess(decodedText) {
       beepError();
     }
   } catch (e) {
-    addLog(roll, "❌ সার্ভারে সংযোগ ব্যর্থ", "err");
-    showStatus("❌ সার্ভারে সংযোগ ব্যর্থ হয়েছে", "err");
+    addLog(roll, "❌ সংযোগ ব্যর্থ", "err");
+    showStatus("❌ সংযোগ ব্যর্থ হয়েছে", "err");
     beepError();
+  } finally {
+    // প্রসেসিং শেষ হলে থ্রোটল সেট থেকে সরিয়ে দেওয়া
+    activeProcessingRolls.delete(roll);
   }
-
-  setTimeout(() => {
-    isProcessing = false;
-    if (html5QrCode) html5QrCode.resume();
-  }, 1200);
 }
 
 function showStatus(text, type) {
@@ -320,7 +316,7 @@ function beep() {
     osc.frequency.value = 880;
     gain.gain.setValueAtTime(0.15, ctx.currentTime);
     osc.start();
-    osc.stop(ctx.currentTime + 0.12);
+    osc.stop(ctx.currentTime + 0.1);
   } catch (e) {}
 }
 
@@ -333,10 +329,13 @@ function beepError() {
     osc.frequency.value = 300;
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
     osc.start();
-    osc.stop(ctx.currentTime + 0.25);
+    osc.stop(ctx.currentTime + 0.2);
   } catch (e) {}
 }
 
+/**
+ * 📄 সেফ PDF ও প্রিন্ট প্রিভিউ ফিক্স
+ */
 function generatePDF() {
   if (scanHistoryData.length === 0) {
     alert("ডাউনলোড করার মতো কোনো হাজিরা ডেটা নেই!");
@@ -346,8 +345,12 @@ function generatePDF() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
 
-  const printWindow = window.open('', '_blank', 'width=800,height=600');
-  
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert("❌ আপনার ব্রাউজারে Pop-up ব্লক করা আছে। অনুগ্রহ করে Pop-up টি Allow করে দিন।");
+    return;
+  }
+
   let tableRows = '';
   scanHistoryData.forEach((item, index) => {
     tableRows += `
@@ -367,7 +370,7 @@ function generatePDF() {
       <meta charset="UTF-8">
       <title>হাজিরা রিপোর্ট - ${session} (${date})</title>
       <style>
-        body { font-family: 'SolaimanLipi', Arial, sans-serif; padding: 20px; color: #000; }
+        body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
         h2 { text-align: center; margin-bottom: 5px; }
         .meta { margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
@@ -397,18 +400,19 @@ function generatePDF() {
           ${tableRows}
         </tbody>
       </table>
-      <script>
-        window.onload = function() {
-          window.print();
-          window.close();
-        };
-      <\/script>
     </body>
     </html>
   `;
 
+  printWindow.document.open();
   printWindow.document.write(printContent);
   printWindow.document.close();
+
+  // নিরাপদ প্রিন্ট ডায়ালগ কল
+  setTimeout(() => {
+    printWindow.focus();
+    printWindow.print();
+  }, 500);
 }
 </script>
 </body>
