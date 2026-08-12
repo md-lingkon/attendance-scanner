@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QR ও ম্যানুয়াল হাজিরা সিস্টেম</title>
+<title>QR হাজিরা স্ক্যানার</title>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   * { box-sizing: border-box; }
@@ -29,26 +29,21 @@
   }
 
   label { display: block; margin-bottom: 6px; font-weight: bold; color: #cbd5e1; font-size: 14px; }
-  select, input, textarea {
+  select, input {
     width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #334155;
     background: #0f172a; color: #fff; font-size: 15px; margin-bottom: 12px;
-    font-family: inherit;
   }
-
-  textarea { resize: vertical; min-height: 70px; }
 
   #reader { width: 100%; border-radius: 10px; overflow: hidden; background: #0f172a; }
 
   .btn {
-    width: 100%; padding: 12px; border: none; border-radius: 8px;
-    font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.2s;
+    width: 100%; padding: 14px; border: none; border-radius: 10px;
+    font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s;
   }
   .btn-start { background: #10b981; color: white; }
   .btn-start:hover { background: #059669; }
   .btn-stop { background: #ef4444; color: white; }
   .btn-stop:hover { background: #dc2626; }
-  .btn-manual { background: #8b5cf6; color: white; }
-  .btn-manual:hover { background: #7c3aed; }
   .btn-pdf { background: #3b82f6; color: white; margin-top: 10px; }
   .btn-pdf:hover { background: #2563eb; }
   .btn:disabled { background: #475569; cursor: not-allowed; opacity: 0.6; }
@@ -69,18 +64,12 @@
   .log-time { color: #94a3b8; font-size: 11px; margin-left: 8px; }
 
   .badge { font-size: 12px; padding: 2px 8px; border-radius: 20px; background: #334155; color: #cbd5e1; }
-  
-  .divider {
-    text-align: center; margin: 16px 0; color: #64748b; font-size: 12px;
-    display: flex; align-items: center; gap: 10px;
-  }
-  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #334155; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h2>📷 হাজিরা ম্যানেজমেন্ট সিস্টেম</h2>
-  <div class="subtitle">QR স্ক্যানার ও ফার্স্ট ম্যানুয়াল এন্ট্রি পেজ</div>
+  <h2>📷 QR হাজিরা স্ক্যানার</h2>
+  <div class="subtitle">স্ট্যান্ডঅ্যালোন পেজ · Apps Script API দিয়ে সংযুক্ত</div>
 
   <div class="card">
     <label>সেশন সিলেক্ট করুন</label>
@@ -89,14 +78,6 @@
     <label>তারিখ</label>
     <input type="date" id="attDate">
 
-    <!-- ✍️ ম্যানুয়াল রোল এন্ট্রি সেকশন -->
-    <label for="manualRolls">✍️ ম্যানুয়াল রোল নম্বর (কমা দিয়ে একাধিক লিখুন)</label>
-    <textarea id="manualRolls" placeholder="উদাহরণ: 1, 2, 3, 4, 5"></textarea>
-    <button class="btn btn-manual" id="manualBtn" onclick="submitManualAttendance()">ম্যানুয়াল হাজিরা সেভ করুন</button>
-
-    <div class="divider">অথবা QR স্ক্যান করুন</div>
-
-    <!-- 📷 QR স্ক্যানার সেকশন -->
     <div id="reader"></div>
 
     <div style="margin-top:14px; display:flex; gap:10px;">
@@ -109,21 +90,22 @@
 
   <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-      <label style="margin:0;">সাম্প্রতিক হাজিরা</label>
+      <label style="margin:0;">সাম্প্রতিক স্ক্যান</label>
       <span class="badge" id="countBadge">0 জন</span>
     </div>
-    <div id="log"><p style="color:#64748b; font-size:13px;">এখনও কোনো ইনপুট দেওয়া হয়নি।</p></div>
+    <div id="log"><p style="color:#64748b; font-size:13px;">এখনও কোনো স্ক্যান হয়নি।</p></div>
     
     <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()" disabled>📄 PDF রিপোর্ট সেভ করুন</button>
   </div>
 </div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbwm0UtKeERyPVNYUg2f2yMp9vDjVttTg4-kgTMYYwHYV9BV4qc0_ftjosHTXzUD3XcYvQ/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzXG35vFl4Uxy9J8DiKgaMPBgQmOh4s1xdYzxlAIfquaIhfJEYgU-OgkNGh8YSu_kBhNA/exec";
 
 let html5QrCode = null;
 let scannedCount = 0;
 
+// প্রসেসিং অবস্থায় থাকা রোল ও শেষ স্ক্যান টাইমের রেকর্ড
 const activeProcessingRolls = new Set();
 const completedRolls = new Set();
 const scanHistoryData = [];
@@ -160,92 +142,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.error(e);
   }
 });
-
-/**
- * ⚡ ফার্স্ট ও সিকিউর বাল্ক প্রসেসিং (১ টিমাত্র API কলে সব ইনপুট প্রসেস হবে)
- */
-async function submitManualAttendance() {
-  const session = document.getElementById("sessionDrop").value;
-  const date = document.getElementById("attDate").value;
-  const rawInput = document.getElementById("manualRolls").value.trim();
-
-  if (!session || !date) {
-    showStatus("⚠️ প্রথমে সেশন ও তারিখ সিলেক্ট করুন!", "warn");
-    return;
-  }
-
-  if (!rawInput) {
-    showStatus("⚠️ অন্তত একটি রোল নম্বর ইনপুট দিন!", "warn");
-    return;
-  }
-
-  // কমা, স্পেস বা নিউলাইন দিয়ে স্প্লিট
-  const rawRolls = rawInput.split(/[\n, ]+/).map(r => r.trim()).filter(r => r.length > 0);
-  
-  // ক্লায়েন্ট সাইড ডুপ্লিকেট দূর করা
-  const rollsToSend = [];
-  const localDuplicates = [];
-
-  rawRolls.forEach(r => {
-    if (completedRolls.has(r) || rollsToSend.includes(r)) {
-      localDuplicates.push(r);
-    } else {
-      rollsToSend.push(r);
-    }
-  });
-
-  if (rollsToSend.length === 0) {
-    showStatus("⚠️ ইনপুটকৃত সকল রোল ইতিমধ্যে যুক্ত করা হয়েছে!", "warn");
-    return;
-  }
-
-  const btn = document.getElementById("manualBtn");
-  btn.disabled = true;
-  showStatus(`⏳ ${rollsToSend.length} টি রোল সার্ভারে সেভ হচ্ছে...`, "info");
-
-  try {
-    // 🚀 ১ টি মাত্র API কল পাঠানো হচ্ছে
-    const resp = await callApi({
-      action: "markAttendanceBulk",
-      rolls: rollsToSend,
-      session: session,
-      date: date
-    });
-
-    if (resp.success && Array.isArray(resp.results)) {
-      let successAdded = 0;
-      let alreadyExist = 0;
-
-      resp.results.forEach(item => {
-        const roll = item.roll;
-        const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-
-        if (item.status === "success") {
-          completedRolls.add(roll);
-          scanHistoryData.push({ roll: roll, time: scanTime, status: "সফল (ম্যানুয়াল)" });
-          addLog(roll, "✅ ম্যানুয়াল হাজিরা সম্পন্ন — রোল " + roll, "ok");
-          successAdded++;
-        } else {
-          completedRolls.add(roll);
-          addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
-          alreadyExist++;
-        }
-      });
-
-      document.getElementById("manualRolls").value = "";
-      if (completedRolls.size > 0) document.getElementById("pdfBtn").disabled = false;
-
-      showStatus(`✨ সম্পন্ন! সফল: ${successAdded} জন, ডুপ্লিকেট: ${alreadyExist + localDuplicates.length} জন।`, "ok");
-    } else {
-      showStatus("❌ সার্ভার এরর: " + (resp.error || "অজানা ত্রুটি"), "err");
-    }
-  } catch (e) {
-    console.error(e);
-    showStatus("❌ নেটওয়ার্ক বা সংযোগ ব্যর্থ হয়েছে!", "err");
-  } finally {
-    btn.disabled = false;
-  }
-}
 
 function startScanner() {
   const session = document.getElementById("sessionDrop").value;
@@ -311,18 +207,27 @@ function extractRollNumber(decodedText) {
   return text;
 }
 
+/**
+ * ⚡ দ্রুত অটোমেটিক স্ক্যান লজিক (Camera Pause হবে না)
+ */
 function onScanSuccess(decodedText) {
   const roll = extractRollNumber(decodedText);
+
   if (!roll) return;
 
+  // ১. যদি ইতোমধ্যে সফল হাজিরা দেওয়া হয়ে থাকে
   if (completedRolls.has(roll)) {
     beepError();
-    showStatus(`⚠️ রোল ${roll} ইতিমধ্যে যুক্ত হয়েছে!`, "warn");
+    showStatus(`⚠️ রোল ${roll} ইতিমধ্যে স্ক্যান করা হয়েছে!`, "warn");
     return;
   }
 
-  if (activeProcessingRolls.has(roll)) return;
+  // ২. যদি ব্যাকগ্রাউন্ডে প্রসেসিং অবস্থায় থাকে
+  if (activeProcessingRolls.has(roll)) {
+    return; 
+  }
 
+  // প্রসেসিং সেটে রোলটি মার্ক করা
   activeProcessingRolls.add(roll);
   beep();
 
@@ -330,39 +235,49 @@ function onScanSuccess(decodedText) {
   const date = document.getElementById("attDate").value;
 
   showStatus("⏳ রোল " + roll + " প্রসেস হচ্ছে...", "info");
-  
-  // একক QR স্ক্যানের জন্য
-  callApi({
-    action: "markAttendanceBulk",
-    rolls: [roll],
-    session: session,
-    date: date
-  }).then(resp => {
-    if (resp.success && resp.results && resp.results[0]) {
-      const res = resp.results[0];
-      if (res.status === "success") {
+
+  // ব্যাকগ্রাউন্ডে অটো প্রসেস করা (ক্যামেরা চালু থাকবে)
+  processAttendanceAsync(roll, session, date);
+}
+
+async function processAttendanceAsync(roll, session, date) {
+  try {
+    const resp = await callApi({ action: "markAttendance", roll: roll, session: session, date: date });
+    
+    if (resp.success) {
+      const msg = resp.data;
+      if (msg.includes("সফল") && !msg.includes("পাওয়া যায়নি") && !msg.includes("আগে হয়েছে")) {
         completedRolls.add(roll);
-        const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
-        scanHistoryData.push({ roll: roll, time: scanTime, status: "সফল (QR)" });
+        
+        const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        scanHistoryData.push({ roll: roll, time: scanTime, status: "সফল" });
+
         addLog(roll, "✅ হাজিরা সম্পন্ন — রোল " + roll, "ok");
         showStatus("✅ রোল " + roll + " — হাজিরা সফল হয়েছে", "ok");
         document.getElementById("pdfBtn").disabled = false;
-      } else {
+      } else if (msg.includes("আগে হয়েছে")) {
         completedRolls.add(roll);
-        addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
-        showStatus("⚠️ রোল " + roll + " — আগেই হাজিরা দেওয়া হয়েছে", "warn");
+        addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
+        showStatus("⚠️ রোল " + roll + " — আগেই হাজিরা দেওয়া হয়েছে", "warn");
+        beepError();
+      } else {
+        addLog(roll, "❌ রোল খুঁজে পাওয়া যায়নি — রোল " + roll, "err");
+        showStatus("❌ রোল " + roll + " — সেশনে পাওয়া যায়নি", "err");
         beepError();
       }
     } else {
-      showStatus("❌ প্রসেস করা যায়নি", "err");
+      addLog(roll, "❌ এরর: " + resp.error, "err");
+      showStatus("❌ এরর: " + resp.error, "err");
       beepError();
     }
-  }).catch(() => {
+  } catch (e) {
+    addLog(roll, "❌ সংযোগ ব্যর্থ", "err");
     showStatus("❌ সংযোগ ব্যর্থ হয়েছে", "err");
     beepError();
-  }).finally(() => {
+  } finally {
+    // প্রসেসিং শেষ হলে থ্রোটল সেট থেকে সরিয়ে দেওয়া
     activeProcessingRolls.delete(roll);
-  });
+  }
 }
 
 function showStatus(text, type) {
@@ -418,6 +333,9 @@ function beepError() {
   } catch (e) {}
 }
 
+/**
+ * 📄 সেফ PDF ও প্রিন্ট প্রিভিউ ফিক্স
+ */
 function generatePDF() {
   if (scanHistoryData.length === 0) {
     alert("ডাউনলোড করার মতো কোনো হাজিরা ডেটা নেই!");
@@ -457,7 +375,9 @@ function generatePDF() {
         .meta { margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th { background: #f2f2f2; border: 1px solid #333; padding: 8px; font-weight: bold; }
-        @media print { body { padding: 0; } }
+        @media print {
+          body { padding: 0; }
+        }
       </style>
     </head>
     <body>
@@ -488,6 +408,7 @@ function generatePDF() {
   printWindow.document.write(printContent);
   printWindow.document.close();
 
+  // নিরাপদ প্রিন্ট ডায়ালগ কল
   setTimeout(() => {
     printWindow.focus();
     printWindow.print();
