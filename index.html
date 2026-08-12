@@ -80,7 +80,7 @@
 <body>
 <div class="wrap">
   <h2>📷 হাজিরা ম্যানেজমেন্ট সিস্টেম</h2>
-  <div class="subtitle">QR স্ক্যানার ও ম্যানুয়াল এন্ট্রি পেজ</div>
+  <div class="subtitle">QR স্ক্যানার ও ফার্স্ট ম্যানুয়াল এন্ট্রি পেজ</div>
 
   <div class="card">
     <label>সেশন সিলেক্ট করুন</label>
@@ -91,7 +91,7 @@
 
     <!-- ✍️ ম্যানুয়াল রোল এন্ট্রি সেকশন -->
     <label for="manualRolls">✍️ ম্যানুয়াল রোল নম্বর (কমা দিয়ে একাধিক লিখুন)</label>
-    <textarea id="manualRolls" placeholder="উদাহরণ: 101, 102, 103, 104"></textarea>
+    <textarea id="manualRolls" placeholder="উদাহরণ: 1, 2, 3, 4, 5"></textarea>
     <button class="btn btn-manual" id="manualBtn" onclick="submitManualAttendance()">ম্যানুয়াল হাজিরা সেভ করুন</button>
 
     <div class="divider">অথবা QR স্ক্যান করুন</div>
@@ -119,7 +119,7 @@
 </div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbwBtxX_fGgTE3e9XNWMBpAeD8U5kY3JKf8AadU8Ra9lQEjjq5CURufn_XxHCDdmdgfXVQ/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwm0UtKeERyPVNYUg2f2yMp9vDjVttTg4-kgTMYYwHYV9BV4qc0_ftjosHTXzUD3XcYvQ/exec";
 
 let html5QrCode = null;
 let scannedCount = 0;
@@ -162,7 +162,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 /**
- * ✍️ ম্যানুয়াল রোল প্রসেসিং লজিক (কমা ও ডুপ্লিকেট চেকিং সহ)
+ * ⚡ ফার্স্ট ও সিকিউর বাল্ক প্রসেসিং (১ টিমাত্র API কলে সব ইনপুট প্রসেস হবে)
  */
 async function submitManualAttendance() {
   const session = document.getElementById("sessionDrop").value;
@@ -179,80 +179,72 @@ async function submitManualAttendance() {
     return;
   }
 
-  // কমা, স্পেস বা নিউলাইন দিয়ে স্প্লিট করা এবং ফিল্টার করা
+  // কমা, স্পেস বা নিউলাইন দিয়ে স্প্লিট
   const rawRolls = rawInput.split(/[\n, ]+/).map(r => r.trim()).filter(r => r.length > 0);
   
-  if (rawRolls.length === 0) {
-    showStatus("⚠️ সঠিক রোল নম্বর পাওয়া যায়নি!", "warn");
-    return;
-  }
-
-  // ইউনিক রোল বের করা (একই ইনপুটে দুবার রোল দিলে তা বাতিল করা)
-  const uniqueRolls = [];
-  const duplicateInInput = [];
+  // ক্লায়েন্ট সাইড ডুপ্লিকেট দূর করা
+  const rollsToSend = [];
+  const localDuplicates = [];
 
   rawRolls.forEach(r => {
-    if (uniqueRolls.includes(r)) {
-      duplicateInInput.push(r);
+    if (completedRolls.has(r) || rollsToSend.includes(r)) {
+      localDuplicates.push(r);
     } else {
-      uniqueRolls.push(r);
+      rollsToSend.push(r);
     }
   });
 
-  const btn = document.getElementById("manualBtn");
-  btn.disabled = true;
-
-  let successAdded = 0;
-  let alreadyExistCount = 0;
-
-  showStatus(`⏳ মোট ${uniqueRolls.length} টি রোল প্রসেস করা হচ্ছে...`, "info");
-
-  for (let i = 0; i < uniqueRolls.length; i++) {
-    const roll = uniqueRolls[i];
-
-    // যদি আগে থেকেই স্ক্যান বা ম্যানুয়ালি সাবমিট করা হয়ে থাকে
-    if (completedRolls.has(roll)) {
-      addLog(roll, "⚠️ আগেই হাজিরা দেওয়া আছে — রোল " + roll, "warn");
-      alreadyExistCount++;
-      continue;
-    }
-
-    try {
-      const resp = await callApi({ action: "markAttendance", roll: roll, session: session, date: date });
-      
-      if (resp.success) {
-        const msg = resp.data;
-        if (msg.includes("সফল") && !msg.includes("পাওয়া যায়নি") && !msg.includes("আগে হয়েছে")) {
-          completedRolls.add(roll);
-          
-          const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-          scanHistoryData.push({ roll: roll, time: scanTime, status: "সফল (ম্যানুয়াল)" });
-
-          addLog(roll, "✅ ম্যানুয়াল হাজিরা সম্পন্ন — রোল " + roll, "ok");
-          successAdded++;
-          document.getElementById("pdfBtn").disabled = false;
-        } else if (msg.includes("আগে হয়েছে")) {
-          completedRolls.add(roll);
-          addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
-          alreadyExistCount++;
-        } else {
-          addLog(roll, "❌ রোল খুঁজে পাওয়া যায়নি — রোল " + roll, "err");
-        }
-      } else {
-        addLog(roll, "❌ এরর: " + resp.error, "err");
-      }
-    } catch (e) {
-      addLog(roll, "❌ সংযোগ ব্যর্থ — রোল " + roll, "err");
-    }
+  if (rollsToSend.length === 0) {
+    showStatus("⚠️ ইনপুটকৃত সকল রোল ইতিমধ্যে যুক্ত করা হয়েছে!", "warn");
+    return;
   }
 
-  // ফিল্ড ক্লিয়ার ও স্ট্যাটাস আপডেট
-  document.getElementById("manualRolls").value = "";
-  btn.disabled = false;
+  const btn = document.getElementById("manualBtn");
+  btn.disabled = true;
+  showStatus(`⏳ ${rollsToSend.length} টি রোল সার্ভারে সেভ হচ্ছে...`, "info");
 
-  let statusMsg = `✨ প্রসেস সম্পন্ন! সফল: ${successAdded} জন।`;
-  if (alreadyExistCount > 0) statusMsg += ` (ডুপ্লিকেট: ${alreadyExistCount} টি)`;
-  showStatus(statusMsg, successAdded > 0 ? "ok" : "warn");
+  try {
+    // 🚀 ১ টি মাত্র API কল পাঠানো হচ্ছে
+    const resp = await callApi({
+      action: "markAttendanceBulk",
+      rolls: rollsToSend,
+      session: session,
+      date: date
+    });
+
+    if (resp.success && Array.isArray(resp.results)) {
+      let successAdded = 0;
+      let alreadyExist = 0;
+
+      resp.results.forEach(item => {
+        const roll = item.roll;
+        const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+
+        if (item.status === "success") {
+          completedRolls.add(roll);
+          scanHistoryData.push({ roll: roll, time: scanTime, status: "সফল (ম্যানুয়াল)" });
+          addLog(roll, "✅ ম্যানুয়াল হাজিরা সম্পন্ন — রোল " + roll, "ok");
+          successAdded++;
+        } else {
+          completedRolls.add(roll);
+          addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
+          alreadyExist++;
+        }
+      });
+
+      document.getElementById("manualRolls").value = "";
+      if (completedRolls.size > 0) document.getElementById("pdfBtn").disabled = false;
+
+      showStatus(`✨ সম্পন্ন! সফল: ${successAdded} জন, ডুপ্লিকেট: ${alreadyExist + localDuplicates.length} জন।`, "ok");
+    } else {
+      showStatus("❌ সার্ভার এরর: " + (resp.error || "অজানা ত্রুটি"), "err");
+    }
+  } catch (e) {
+    console.error(e);
+    showStatus("❌ নেটওয়ার্ক বা সংযোগ ব্যর্থ হয়েছে!", "err");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function startScanner() {
@@ -325,7 +317,7 @@ function onScanSuccess(decodedText) {
 
   if (completedRolls.has(roll)) {
     beepError();
-    showStatus(`⚠️ রোল ${roll} ইতিমধ্যে স্ক্যান বা ম্যানুয়ালি যুক্ত হয়েছে!`, "warn");
+    showStatus(`⚠️ রোল ${roll} ইতিমধ্যে যুক্ত হয়েছে!`, "warn");
     return;
   }
 
@@ -338,46 +330,39 @@ function onScanSuccess(decodedText) {
   const date = document.getElementById("attDate").value;
 
   showStatus("⏳ রোল " + roll + " প্রসেস হচ্ছে...", "info");
-  processAttendanceAsync(roll, session, date);
-}
-
-async function processAttendanceAsync(roll, session, date) {
-  try {
-    const resp = await callApi({ action: "markAttendance", roll: roll, session: session, date: date });
-    
-    if (resp.success) {
-      const msg = resp.data;
-      if (msg.includes("সফল") && !msg.includes("পাওয়া যায়নি") && !msg.includes("আগে হয়েছে")) {
+  
+  // একক QR স্ক্যানের জন্য
+  callApi({
+    action: "markAttendanceBulk",
+    rolls: [roll],
+    session: session,
+    date: date
+  }).then(resp => {
+    if (resp.success && resp.results && resp.results[0]) {
+      const res = resp.results[0];
+      if (res.status === "success") {
         completedRolls.add(roll);
-        
-        const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
         scanHistoryData.push({ roll: roll, time: scanTime, status: "সফল (QR)" });
-
         addLog(roll, "✅ হাজিরা সম্পন্ন — রোল " + roll, "ok");
         showStatus("✅ রোল " + roll + " — হাজিরা সফল হয়েছে", "ok");
         document.getElementById("pdfBtn").disabled = false;
-      } else if (msg.includes("আগে হয়েছে")) {
+      } else {
         completedRolls.add(roll);
         addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
         showStatus("⚠️ রোল " + roll + " — আগেই হাজিরা দেওয়া হয়েছে", "warn");
         beepError();
-      } else {
-        addLog(roll, "❌ রোল খুঁজে পাওয়া যায়নি — রোল " + roll, "err");
-        showStatus("❌ রোল " + roll + " — সেশনে পাওয়া যায়নি", "err");
-        beepError();
       }
     } else {
-      addLog(roll, "❌ এরর: " + resp.error, "err");
-      showStatus("❌ এরর: " + resp.error, "err");
+      showStatus("❌ প্রসেস করা যায়নি", "err");
       beepError();
     }
-  } catch (e) {
-    addLog(roll, "❌ সংযোগ ব্যর্থ", "err");
+  }).catch(() => {
     showStatus("❌ সংযোগ ব্যর্থ হয়েছে", "err");
     beepError();
-  } finally {
+  }).finally(() => {
     activeProcessingRolls.delete(roll);
-  }
+  });
 }
 
 function showStatus(text, type) {
