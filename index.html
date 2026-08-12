@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QR হাজিরা স্ক্যানার</title>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<!-- PDF তৈরির জন্য jsPDF এবং html2pdf লাইব্রেরি -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -66,32 +64,12 @@
   .log-time { color: #94a3b8; font-size: 11px; }
 
   .badge { font-size: 12px; padding: 2px 8px; border-radius: 20px; background: #334155; color: #cbd5e1; }
-  
-  /* PDF প্রিন্ট টেমপ্লেট স্টাইল (হিডেন) */
-  #pdfTemplate {
-    display: none;
-    background: #fff;
-    color: #000;
-    padding: 20px;
-    font-family: Arial, sans-serif;
-  }
-  #pdfTemplate table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 15px;
-  }
-  #pdfTemplate th, #pdfTemplate td {
-    border: 1px solid #ddd;
-    padding: 8px;
-    text-align: left;
-  }
-  #pdfTemplate th { background-color: #f2f2f2; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h2>📷 QR হাজিরা স্ক্যানার</h2>
-  <div class="subtitle">স্ট্যান্ডঅ্যালোন পেজ · Apps Script API দিয়ে সংযুক্ত</div>
+  <div class="subtitle">স্ট্যান্ডঅ্যালোন পেজ · Apps Script API দিয়ে সংযুক্ত</div>
 
   <div class="card">
     <label>সেশন সিলেক্ট করুন</label>
@@ -117,28 +95,8 @@
     </div>
     <div id="log"><p style="color:#64748b; font-size:13px;">এখনও কোনো স্ক্যান হয়নি।</p></div>
     
-    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()" disabled>📄 PDF রিপোর্ট ডাউনলোড করুন</button>
+    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()" disabled>📄 PDF রিপোর্ট সেভ করুন</button>
   </div>
-</div>
-
-<!-- PDF রিপোর্ট টেমপ্লেট -->
-<div id="pdfTemplate">
-  <h2 style="text-align:center; color:#000;">হাজিরা রিপোর্ট</h2>
-  <hr>
-  <p><strong>সেশন:</strong> <span id="pdfSession"></span></p>
-  <p><strong>তারিখ:</strong> <span id="pdfDate"></span></p>
-  <p><strong>মোট হাজিরা:</strong> <span id="pdfTotal"></span> জন</p>
-  <table>
-    <thead>
-      <tr>
-        <th>ক্রমিক</th>
-        <th>রোল নম্বর</th>
-        <th>সময়</th>
-        <th>স্ট্যাটাস</th>
-      </tr>
-    </thead>
-    <tbody id="pdfTableBody"></tbody>
-  </table>
 </div>
 
 <script>
@@ -252,7 +210,7 @@ async function onScanSuccess(decodedText) {
     if (resp.success) {
       const msg = resp.data;
       if (msg.includes("সফল") && !msg.includes("পাওয়া যায়নি") && !msg.includes("আগে হয়েছে")) {
-        completedRolls.add(roll); // সফল রিকর্ড সেট-এ সেভ রাখা
+        completedRolls.add(roll); // সফল রেকর্ড সেট-এ সেভ রাখা
         
         const scanTime = new Date().toLocaleTimeString('bn-BD');
         scanHistoryData.push({ roll: roll, time: scanTime, status: "সফল" });
@@ -329,14 +287,14 @@ function beepError() {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value = 300; // লো ফ্রিকোয়েন্সি সাউন্ড ওয়ার্নিংয়ের জন্য
+    osc.frequency.value = 300; // ওয়ার্নিং সাউন্ড
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
     osc.start();
     osc.stop(ctx.currentTime + 0.25);
   } catch (e) {}
 }
 
-// ---------- PDF তৈরি করার ফাংশন ----------
+// ---------- ব্রাউজার প্রিন্ট দিয়ে PDF সেভ করার আপডেট ফাংশন ----------
 function generatePDF() {
   if (scanHistoryData.length === 0) {
     alert("ডাউনলোড করার মতো কোনো হাজিরা ডেটা নেই!");
@@ -346,38 +304,65 @@ function generatePDF() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
 
-  document.getElementById("pdfSession").innerText = session;
-  document.getElementById("pdfDate").innerText = date;
-  document.getElementById("pdfTotal").innerText = scanHistoryData.length;
-
-  const tableBody = document.getElementById("pdfTableBody");
-  tableBody.innerHTML = "";
-
+  const printWindow = window.open('', '', 'width=800,height=600');
+  
+  let tableRows = '';
   scanHistoryData.forEach((item, index) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${index + 1}</td>
-      <td>${item.roll}</td>
-      <td>${item.time}</td>
-      <td>${item.status}</td>
+    tableRows += `
+      <tr>
+        <td style="border:1px solid #000; padding:8px; text-align:center;">${index + 1}</td>
+        <td style="border:1px solid #000; padding:8px; text-align:center;">${item.roll}</td>
+        <td style="border:1px solid #000; padding:8px; text-align:center;">${item.time}</td>
+        <td style="border:1px solid #000; padding:8px; text-align:center; color:green; font-weight:bold;">${item.status}</td>
+      </tr>
     `;
-    tableBody.appendChild(tr);
   });
 
-  const element = document.getElementById("pdfTemplate");
-  element.style.display = "block"; // প্রিন্ট তৈরি করার আগে দৃশ্যমান করা
+  const printContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>হাজিরা রিপোর্ট - ${session} (${date})</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
+        h2 { text-align: center; margin-bottom: 5px; }
+        .meta { margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { background: #f2f2f2; border: 1px solid #000; padding: 8px; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <h2>📋 হাজিরা রিপোর্ট</h2>
+      <div class="meta">
+        <p><strong>সেশন:</strong> ${session}</p>
+        <p><strong>তারিখ:</strong> ${date}</p>
+        <p><strong>মোট হাজিরা:</strong> ${scanHistoryData.length} জন</p>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ক্রমিক</th>
+            <th>রোল নম্বর</th>
+            <th>সময়</th>
+            <th>স্ট্যাটাস</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+      <script>
+        window.onload = function() {
+          window.print();
+          window.close();
+        };
+      <\/script>
+    </body>
+    </html>
+  `;
 
-  const opt = {
-    margin:       10,
-    filename:     `Attendance_${session}_${date}.pdf`,
-    image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2 },
-    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
-
-  html2pdf().set(opt).from(element).save().then(() => {
-    element.style.display = "none"; // ডাউনলোড শেষে আবার হাইড করে দেওয়া
-  });
+  printWindow.document.write(printContent);
+  printWindow.document.close();
 }
 </script>
 </body>
