@@ -84,6 +84,11 @@
 
     <label>তারিখ</label>
     <input type="date" id="attDate">
+
+    <label>Room No (শুধুমাত্র ইংরেজিতে লিখুন)</label>
+    <input type="text" id="roomInput" placeholder="যেমনঃ 101, A-Block" autocomplete="off" oninput="sanitizeRoomInput(this)" style="text-transform:uppercase;">
+    <div class="hint" id="roomWarnHint" style="display:none; color:#f87171;">⚠️ Room No শুধুমাত্র ইংরেজি অক্ষর (A-Z), সংখ্যা (0-9) ও হাইফেন (-) ব্যবহার করা যাবে!</div>
+    <div class="hint">হাজিরা নেবার আগে Room No অবশ্যই পূরণ করতে হবে।</div>
   </div>
 
   <div class="card">
@@ -111,18 +116,25 @@
       <span class="badge" id="countBadge">0 জন</span>
     </div>
     <div id="log"><p style="color:#64748b; font-size:13px;">এখনও কোনো স্ক্যান হয়নি।</p></div>
-    
-    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()">📄 PDF রিপোর্ট সেভ করুন (নির্বাচিত সেশন ও তারিখের সম্পূর্ণ হাজিরা)</button>
+  </div>
+
+  <div class="card">
+    <label>📄 রিপোর্ট (সেশন ও তারিখ উপরে সিলেক্ট করা থাকতে হবে)</label>
+    <div class="hint">রুম নম্বর সিলেক্ট করুন — শিট থেকে অটো লোড হবে</div>
+    <select id="roomReportDrop">
+      <option value="All">🏫 সকল রুম (All Room)</option>
+    </select>
+    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()">📄 PDF রিপোর্ট সেভ করুন</button>
   </div>
 </div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbzkJ7NyEdhtTynwauGBpoD8sPsKexZIkkFNHH3kogBTNuxuxeaSTFu2ic2dnA9SZ8WLLg/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycby91QAMRmEweBg-Yn4ZjsqRgitZY0h9EZQ58XtL3BAtDugFClyrehuq_k2o7Q92QjG4fw/exec";
 
 let html5QrCode = null;
 let scannedCount = 0;
 
-// প্রসেসিং অবস্থায় থাকা রোল ও শেষ স্ক্যান টাইমের রেকর্ড
+// প্রসেসিং অবস্থায় থাকা রোল ও শেষ স্ক্যান টাইমের রেকর্ড
 const activeProcessingRolls = new Set();
 const completedRolls = new Set();
 const scanHistoryData = [];
@@ -158,14 +170,45 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById("sessionDrop").innerHTML = '<option value="">সার্ভারে সংযোগ ব্যর্থ</option>';
     console.error(e);
   }
+
+  // সেশন বা তারিখ পরিবর্তন হলে রিপোর্টের Room ড্রপডাউন অটো রিফ্রেশ হবে
+  document.getElementById("sessionDrop").addEventListener("change", loadRoomList);
+  document.getElementById("attDate").addEventListener("change", loadRoomList);
 });
+
+/**
+ * নির্বাচিত সেশন ও তারিখের জন্য শিটে যেসব Room No তে হাজিরা নেওয়া হয়েছে
+ * সেগুলো সার্ভার থেকে এনে "রিপোর্ট" এর Room ড্রপডাউনে বসানো, "All Room" সহ।
+ */
+async function loadRoomList() {
+  const session = document.getElementById("sessionDrop").value;
+  const date = document.getElementById("attDate").value;
+  const roomDrop = document.getElementById("roomReportDrop");
+
+  roomDrop.innerHTML = '<option value="All">🏫 সকল রুম (All Room)</option>';
+  if (!session || !date) return;
+
+  try {
+    const resp = await callApi({ action: "getRoomList", session: session, date: date });
+    if (resp.success && Array.isArray(resp.data)) {
+      resp.data.forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r; opt.text = "Room " + r;
+        roomDrop.add(opt);
+      });
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
 
 function startScanner() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
+  const room = document.getElementById("roomInput").value.trim();
 
-  if (!session || !date) {
-    showStatus("⚠️ প্রথমে সেশন ও তারিখ সিলেক্ট করুন!", "warn");
+  if (!session || !date || !room) {
+    showStatus("⚠️ প্রথমে সেশন, তারিখ ও Room No পূরণ করুন!", "warn");
     return;
   }
 
@@ -182,6 +225,7 @@ function startScanner() {
     document.getElementById("stopBtn").style.display = "block";
     document.getElementById("sessionDrop").disabled = true;
     document.getElementById("attDate").disabled = true;
+    document.getElementById("roomInput").disabled = true;
     showStatus("📷 স্ক্যানার রেডি! একের পর এক স্ক্যান করতে থাকুন...", "info");
   }).catch(err => {
     showStatus("❌ ক্যামেরা চালু করা যায়নি: " + err, "err");
@@ -196,6 +240,7 @@ function stopScanner() {
       document.getElementById("stopBtn").style.display = "none";
       document.getElementById("sessionDrop").disabled = false;
       document.getElementById("attDate").disabled = false;
+      document.getElementById("roomInput").disabled = false;
       showStatus("⏹️ স্ক্যানার বন্ধ করা হয়েছে", "info");
     }).catch(err => console.error(err));
   }
@@ -232,14 +277,14 @@ function onScanSuccess(decodedText) {
 
   if (!roll) return;
 
-  // ১. যদি ইতোমধ্যে সফল হাজিরা দেওয়া হয়ে থাকে
+  // ১. যদি ইতোমধ্যে সফল হাজিরা দেওয়া হয়ে থাকে
   if (completedRolls.has(roll)) {
     beepError();
     showStatus(`⚠️ রোল ${roll} ইতিমধ্যে স্ক্যান করা হয়েছে!`, "warn");
     return;
   }
 
-  // ২. যদি ব্যাকগ্রাউন্ডে প্রসেসিং অবস্থায় থাকে
+  // ২. যদি ব্যাকগ্রাউন্ডে প্রসেসিং অবস্থায় থাকে
   if (activeProcessingRolls.has(roll)) {
     return; 
   }
@@ -250,16 +295,17 @@ function onScanSuccess(decodedText) {
 
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
+  const room = document.getElementById("roomInput").value.trim();
 
   showStatus("⏳ রোল " + roll + " প্রসেস হচ্ছে...", "info");
 
   // ব্যাকগ্রাউন্ডে অটো প্রসেস করা (ক্যামেরা চালু থাকবে)
-  processAttendanceAsync(roll, session, date);
+  processAttendanceAsync(roll, session, date, room);
 }
 
-async function processAttendanceAsync(roll, session, date) {
+async function processAttendanceAsync(roll, session, date, room) {
   try {
-    const resp = await callApi({ action: "markAttendance", roll: roll, session: session, date: date });
+    const resp = await callApi({ action: "markAttendance", roll: roll, session: session, date: date, room: room });
     
     if (resp.success) {
       const msg = resp.data;
@@ -271,7 +317,6 @@ async function processAttendanceAsync(roll, session, date) {
 
         addLog(roll, "✅ হাজিরা সম্পন্ন — রোল " + roll, "ok");
         showStatus("✅ রোল " + roll + " — হাজিরা সফল হয়েছে", "ok");
-        document.getElementById("pdfBtn").disabled = false;
       } else if (msg.includes("আগে হয়েছে")) {
         completedRolls.add(roll);
         addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
@@ -292,7 +337,7 @@ async function processAttendanceAsync(roll, session, date) {
     showStatus("❌ সংযোগ ব্যর্থ হয়েছে", "err");
     beepError();
   } finally {
-    // প্রসেসিং শেষ হলে থ্রোটল সেট থেকে সরিয়ে দেওয়া
+    // প্রসেসিং শেষ হলে থ্রোটল সেট থেকে সরিয়ে দেওয়া
     activeProcessingRolls.delete(roll);
   }
 }
@@ -305,6 +350,25 @@ function sanitizeRollInput(el) {
   const original = el.value;
   const cleaned = original.replace(/[^0-9,\s]/g, '');
   const hint = document.getElementById("rollWarnHint");
+
+  if (cleaned !== original) {
+    const cursorPos = el.selectionStart - (original.length - cleaned.length);
+    el.value = cleaned;
+    try { el.setSelectionRange(cursorPos, cursorPos); } catch (e) {}
+    if (hint) hint.style.display = "block";
+  } else if (hint) {
+    hint.style.display = "none";
+  }
+}
+
+/**
+ * Room No বক্সে শুধুমাত্র ইংরেজি অক্ষর (A-Z, a-z), সংখ্যা (0-9), হাইফেন (-)
+ * ও স্পেস ছাড়া অন্য কিছু (যেমন বাংলা অক্ষর) টাইপ করলে সাথে সাথে বাদ দেওয়া
+ */
+function sanitizeRoomInput(el) {
+  const original = el.value;
+  const cleaned = original.replace(/[^A-Za-z0-9\-\s]/g, '');
+  const hint = document.getElementById("roomWarnHint");
 
   if (cleaned !== original) {
     const cursorPos = el.selectionStart - (original.length - cleaned.length);
@@ -351,10 +415,11 @@ function parseResultMessage(message) {
 async function submitManualRolls() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
+  const room = document.getElementById("roomInput").value.trim();
   const rawInput = document.getElementById("manualRolls").value;
 
-  if (!session || !date) {
-    showStatus("⚠️ প্রথমে সেশন ও তারিখ সিলেক্ট করুন!", "warn");
+  if (!session || !date || !room) {
+    showStatus("⚠️ প্রথমে সেশন, তারিখ ও Room No পূরণ করুন!", "warn");
     return;
   }
 
@@ -390,7 +455,7 @@ async function submitManualRolls() {
   showStatus("⏳ " + toSend.length + "টি রোল প্রসেস হচ্ছে...", "info");
 
   try {
-    const resp = await callApi({ action: "markAttendance", roll: toSend.join(","), session: session, date: date });
+    const resp = await callApi({ action: "markAttendance", roll: toSend.join(","), session: session, date: date, room: room });
 
     if (resp.success) {
       const message = resp.data;
@@ -412,10 +477,6 @@ async function submitManualRolls() {
       notFound.forEach(r => {
         addLog(r, "❌ রোল খুঁজে পাওয়া যায়নি — রোল " + r, "err");
       });
-
-      if (successRolls.length > 0) {
-        document.getElementById("pdfBtn").disabled = false;
-      }
 
       showStatus(message, successRolls.length > 0 ? "ok" : (notFound.length > 0 ? "err" : "warn"));
       if (notFound.length > 0 || duplicate.length > 0) beepError(); else beep();
@@ -491,14 +552,13 @@ function beepError() {
 /**
  * 📄 রিপোর্ট বাটনে ক্লিক করলে প্রথমে একটি প্রিভিউ (ভিউ) দেখানো হয়,
  * তারপর সেই পেজেই "PDF ডাউনলোড করুন" বাটন থাকবে — যেটাতে ইউজার নিজে ক্লিক
- * করলে তবেই ডাউনলোড শুরু হবে। কোনো Apps (Facebook/Messenger ইত্যাদি)-এর
- * ভিতরের ব্রাউজার থেকে ওপেন করা হলে স্বয়ংক্রিয় (auto) ডাউনলোড প্রায়ই ব্লক
- * হয়ে যায় — কিন্তু সরাসরি ইউজারের ক্লিকের মধ্যে থেকে ডাউনলোড শুরু করলে সেটা
- * কাজ করার সম্ভাবনা অনেক বেশি।
+ * করলে তবেই ডাউনলোড শুরু হবে। এখন সাথে Room No অনুযায়ীও ফিল্টার করা যায়
+ * ("সকল রুম" অথবা নির্দিষ্ট একটি রুম)।
  */
 async function generatePDF() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
+  const room = document.getElementById("roomReportDrop").value || "All";
 
   if (!session || !date) {
     showStatus("⚠️ প্রথমে সেশন ও তারিখ সিলেক্ট করুন!", "warn");
@@ -511,7 +571,7 @@ async function generatePDF() {
   btn.innerText = "⏳ ডেটা আনা হচ্ছে...";
 
   try {
-    const resp = await callApi({ action: "searchAttendance", date: date, roll: "", session: session });
+    const resp = await callApi({ action: "searchAttendance", date: date, roll: "", session: session, room: room });
 
     if (!resp.success) {
       alert("❌ এরর: " + resp.error);
@@ -520,11 +580,11 @@ async function generatePDF() {
 
     const records = Array.isArray(resp.data) ? resp.data : [];
     if (records.length === 0) {
-      alert("⚠️ এই সেশন ও তারিখে কোনো হাজিরা রেকর্ড পাওয়া যায়নি!");
+      alert("⚠️ এই সেশন, তারিখ ও রুমে কোনো হাজিরা রেকর্ড পাওয়া যায়নি!");
       return;
     }
 
-    showReportPreview(session, date, records);
+    showReportPreview(session, date, records, room);
 
   } catch (e) {
     console.error(e);
@@ -538,11 +598,13 @@ async function generatePDF() {
 /**
  * রিপোর্টের প্রিভিউ (ফুল-স্ক্রিন ওভারলে) দেখানো — এখানে সাধারণ HTML হিসেবেই
  * রিপোর্টটি রেন্ডার হয় (তাই বাংলা ফন্ট স্বাভাবিকভাবেই দেখাবে), সাথে উপরে
- * একটি ডাউনলোড ও একটি বন্ধ করার বাটন থাকবে।
+ * একটি ডাউনলোড ও একটি বন্ধ করার বাটন থাকবে। এখন রুম নম্বরও দেখানো হয়।
  */
-function showReportPreview(session, date, records) {
+function showReportPreview(session, date, records, room) {
   const existing = document.getElementById("pdfPreviewOverlay");
   if (existing) existing.remove();
+
+  const roomLabel = (!room || room === "All") ? "সকল রুম (All Room)" : ("Room " + room);
 
   // গ্রুপ অনুযায়ী উপস্থিতি গণনা (বিজ্ঞান, ব্যবসায় শিক্ষা, মানবিক ইত্যাদি)
   const groupCounts = {};
@@ -572,6 +634,7 @@ function showReportPreview(session, date, records) {
         <td style="border:1px solid #333; padding:8px; text-align:center; font-weight:bold;">${item.roll}</td>
         <td style="border:1px solid #333; padding:8px;">${item.name || ''}</td>
         <td style="border:1px solid #333; padding:8px; text-align:center;">${item.group || ''}</td>
+        <td style="border:1px solid #333; padding:8px; text-align:center;">${item.room || ''}</td>
         <td style="border:1px solid #333; padding:8px; text-align:center; color:#059669; font-weight:bold;">উপস্থিত</td>
       </tr>
     `;
@@ -592,6 +655,7 @@ function showReportPreview(session, date, records) {
         <div style="margin-bottom:20px; border-bottom:2px solid #000; padding-bottom:10px;">
           <p style="margin:4px 0;"><strong>সেশন:</strong> ${session}</p>
           <p style="margin:4px 0;"><strong>তারিখ:</strong> ${date}</p>
+          <p style="margin:4px 0;"><strong>রুম:</strong> ${roomLabel}</p>
           <p style="margin:4px 0;"><strong>মোট উপস্থিতি:</strong> ${records.length} জন</p>
           ${groupSummaryHtml}
         </div>
@@ -602,6 +666,7 @@ function showReportPreview(session, date, records) {
               <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">রোল নম্বর</th>
               <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">নাম</th>
               <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">গ্রুপ</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">রুম</th>
               <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">স্ট্যাটাস</th>
             </tr>
           </thead>
@@ -618,7 +683,7 @@ function showReportPreview(session, date, records) {
   document.getElementById("pdfCloseBtn").onclick = () => overlay.remove();
 
   document.getElementById("pdfDownloadBtn").onclick = () => {
-    downloadReportAsPDF(document.getElementById("pdfReportContent"), session, date);
+    downloadReportAsPDF(document.getElementById("pdfReportContent"), session, date, room);
   };
 }
 
@@ -626,9 +691,9 @@ function showReportPreview(session, date, records) {
  * প্রিভিউ থেকে "PDF ডাউনলোড করুন" বাটনে ক্লিক করলে html2canvas দিয়ে রিপোর্ট
  * ছবিতে রূপান্তর করে jsPDF দিয়ে সরাসরি ফাইল ডাউনলোড শুরু হয়। এই কলটি সরাসরি
  * ইউজারের ক্লিক-হ্যান্ডলারের ভিতর থেকে হয় বলে ইন-অ্যাপ ব্রাউজারেও কাজ করার
- * সম্ভাবনা বেশি।
+ * সম্ভাবনা বেশি। ফাইলের নামেও এখন রুম নম্বর যুক্ত থাকবে।
  */
-async function downloadReportAsPDF(reportContentEl, session, date) {
+async function downloadReportAsPDF(reportContentEl, session, date, room) {
   const btn = document.getElementById("pdfDownloadBtn");
   const originalText = btn ? btn.innerText : '';
   if (btn) {
@@ -666,7 +731,8 @@ async function downloadReportAsPDF(reportContentEl, session, date) {
     }
 
     const safeSession = session.toString().replace(/[^a-zA-Z0-9_-]/g, '_');
-    pdf.save(`Attendance_${safeSession}_${date}.pdf`);
+    const safeRoom = (!room || room === "All") ? "AllRooms" : room.toString().replace(/[^a-zA-Z0-9_-]/g, '_');
+    pdf.save(`Attendance_${safeSession}_${date}_${safeRoom}.pdf`);
 
   } catch (e) {
     console.error(e);
