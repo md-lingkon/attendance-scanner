@@ -109,7 +109,7 @@
     </div>
     <div id="log"><p style="color:#64748b; font-size:13px;">এখনও কোনো স্ক্যান হয়নি।</p></div>
     
-    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()" disabled>📄 PDF রিপোর্ট সেভ করুন</button>
+    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()">📄 PDF রিপোর্ট সেভ করুন (নির্বাচিত সেশন ও তারিখের সম্পূর্ণ হাজিরা)</button>
   </div>
 </div>
 
@@ -467,85 +467,116 @@ function beepError() {
 }
 
 /**
- * 📄 সেফ PDF ও প্রিন্ট প্রিভিউ ফিক্স
+ * 📄 PDF রিপোর্ট — সিলেক্ট করা সেশন ও তারিখের জন্য "Attendance" শিট থেকে
+ * সম্পূর্ণ হাজিরা ডেটা সার্ভার থেকে টেনে এনে রিপোর্ট তৈরি করা হয়
+ * (শুধু এই ব্রাউজার সেশনে স্ক্যান করা রোল নয় — QR ও ম্যানুয়াল, দুই ভাবে
+ * যোগ হওয়া সব হাজিরাই এতে থাকবে)
  */
-function generatePDF() {
-  if (scanHistoryData.length === 0) {
-    alert("ডাউনলোড করার মতো কোনো হাজিরা ডেটা নেই!");
-    return;
-  }
-
+async function generatePDF() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
 
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    alert("❌ আপনার ব্রাউজারে Pop-up ব্লক করা আছে। অনুগ্রহ করে Pop-up টি Allow করে দিন।");
+  if (!session || !date) {
+    showStatus("⚠️ প্রথমে সেশন ও তারিখ সিলেক্ট করুন!", "warn");
     return;
   }
 
-  let tableRows = '';
-  scanHistoryData.forEach((item, index) => {
-    tableRows += `
-      <tr>
-        <td style="border:1px solid #333; padding:8px; text-align:center;">${index + 1}</td>
-        <td style="border:1px solid #333; padding:8px; text-align:center; font-weight:bold;">${item.roll}</td>
-        <td style="border:1px solid #333; padding:8px; text-align:center;">${item.time}</td>
-        <td style="border:1px solid #333; padding:8px; text-align:center; color:#059669; font-weight:bold;">${item.status}</td>
-      </tr>
+  const btn = document.getElementById("pdfBtn");
+  const originalText = btn.innerText;
+  btn.disabled = true;
+  btn.innerText = "⏳ ডেটা আনা হচ্ছে...";
+
+  try {
+    const resp = await callApi({ action: "searchAttendance", date: date, roll: "", session: session });
+
+    if (!resp.success) {
+      alert("❌ এরর: " + resp.error);
+      return;
+    }
+
+    const records = Array.isArray(resp.data) ? resp.data : [];
+    if (records.length === 0) {
+      alert("⚠️ এই সেশন ও তারিখে কোনো হাজিরা রেকর্ড পাওয়া যায়নি!");
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("❌ আপনার ব্রাউজারে Pop-up ব্লক করা আছে। অনুগ্রহ করে Pop-up টি Allow করে দিন।");
+      return;
+    }
+
+    let tableRows = '';
+    records.forEach((item, index) => {
+      tableRows += `
+        <tr>
+          <td style="border:1px solid #333; padding:8px; text-align:center;">${index + 1}</td>
+          <td style="border:1px solid #333; padding:8px; text-align:center; font-weight:bold;">${item.roll}</td>
+          <td style="border:1px solid #333; padding:8px;">${item.name || ''}</td>
+          <td style="border:1px solid #333; padding:8px; text-align:center;">${item.group || ''}</td>
+          <td style="border:1px solid #333; padding:8px; text-align:center; color:#059669; font-weight:bold;">উপস্থিত</td>
+        </tr>
+      `;
+    });
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html lang="bn">
+      <head>
+        <meta charset="UTF-8">
+        <title>হাজিরা রিপোর্ট - ${session} (${date})</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
+          h2 { text-align: center; margin-bottom: 5px; }
+          .meta { margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th { background: #f2f2f2; border: 1px solid #333; padding: 8px; font-weight: bold; }
+          @media print {
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <h2>📋 হাজিরা রিপোর্ট</h2>
+        <div class="meta">
+          <p style="margin:4px 0;"><strong>সেশন:</strong> ${session}</p>
+          <p style="margin:4px 0;"><strong>তারিখ:</strong> ${date}</p>
+          <p style="margin:4px 0;"><strong>মোট উপস্থিতি:</strong> ${records.length} জন</p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>ক্রমিক</th>
+              <th>রোল নম্বর</th>
+              <th>নাম</th>
+              <th>গ্রুপ</th>
+              <th>স্ট্যাটাস</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+      </body>
+      </html>
     `;
-  });
 
-  const printContent = `
-    <!DOCTYPE html>
-    <html lang="bn">
-    <head>
-      <meta charset="UTF-8">
-      <title>হাজিরা রিপোর্ট - ${session} (${date})</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
-        h2 { text-align: center; margin-bottom: 5px; }
-        .meta { margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { background: #f2f2f2; border: 1px solid #333; padding: 8px; font-weight: bold; }
-        @media print {
-          body { padding: 0; }
-        }
-      </style>
-    </head>
-    <body>
-      <h2>📋 হাজিরা রিপোর্ট</h2>
-      <div class="meta">
-        <p style="margin:4px 0;"><strong>সেশন:</strong> ${session}</p>
-        <p style="margin:4px 0;"><strong>তারিখ:</strong> ${date}</p>
-        <p style="margin:4px 0;"><strong>মোট উপস্থিতি:</strong> ${scanHistoryData.length} জন</p>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>ক্রমিক</th>
-            <th>রোল নম্বর</th>
-            <th>সময়</th>
-            <th>স্ট্যাটাস</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tableRows}
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `;
+    printWindow.document.open();
+    printWindow.document.write(printContent);
+    printWindow.document.close();
 
-  printWindow.document.open();
-  printWindow.document.write(printContent);
-  printWindow.document.close();
+    // নিরাপদ প্রিন্ট ডায়ালগ কল
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 500);
 
-  // নিরাপদ প্রিন্ট ডায়ালগ কল
-  setTimeout(() => {
-    printWindow.focus();
-    printWindow.print();
-  }, 500);
+  } catch (e) {
+    alert("❌ সংযোগ ব্যর্থ হয়েছে!");
+  } finally {
+    btn.disabled = false;
+    btn.innerText = originalText;
+  }
 }
 </script>
 </body>
