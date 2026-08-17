@@ -29,10 +29,13 @@
   }
 
   label { display: block; margin-bottom: 6px; font-weight: bold; color: #cbd5e1; font-size: 14px; }
-  select, input {
+  select, input, textarea {
     width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #334155;
     background: #0f172a; color: #fff; font-size: 15px; margin-bottom: 12px;
+    font-family: inherit;
   }
+  textarea { resize: vertical; min-height: 70px; }
+  .hint { color: #64748b; font-size: 12px; margin-top: -8px; margin-bottom: 12px; }
 
   #reader { width: 100%; border-radius: 10px; overflow: hidden; background: #0f172a; }
 
@@ -46,6 +49,8 @@
   .btn-stop:hover { background: #dc2626; }
   .btn-pdf { background: #3b82f6; color: white; margin-top: 10px; }
   .btn-pdf:hover { background: #2563eb; }
+  .btn-manual { background: #8b5cf6; color: white; }
+  .btn-manual:hover { background: #7c3aed; }
   .btn:disabled { background: #475569; cursor: not-allowed; opacity: 0.6; }
 
   #status {
@@ -77,7 +82,16 @@
 
     <label>তারিখ</label>
     <input type="date" id="attDate">
+  </div>
 
+  <div class="card">
+    <label>✍️ ম্যানুয়াল রোল এন্ট্রি (স্ক্যান ছাড়া হাজিরা)</label>
+    <div class="hint">একাধিক রোল কমা (,) দিয়ে আলাদা করে লিখুন — যেমনঃ 12, 15, 20</div>
+    <textarea id="manualRolls" rows="3" placeholder="রোল নম্বর লিখুন, যেমনঃ 12, 15, 20"></textarea>
+    <button class="btn btn-manual" id="manualSubmitBtn" onclick="submitManualRolls()">📝 ম্যানুয়াল হাজিরা সাবমিট করুন</button>
+  </div>
+
+  <div class="card">
     <div id="reader"></div>
 
     <div style="margin-top:14px; display:flex; gap:10px;">
@@ -277,6 +291,125 @@ async function processAttendanceAsync(roll, session, date) {
   } finally {
     // প্রসেসিং শেষ হলে থ্রোটল সেট থেকে সরিয়ে দেওয়া
     activeProcessingRolls.delete(roll);
+  }
+}
+
+/**
+ * কমা দিয়ে আলাদা করা রোল স্ট্রিং থেকে পরিষ্কার (trim করা) রোল লিস্ট বের করা
+ */
+function parseRollString(str) {
+  return str.toString().split(',')
+    .map(r => r.trim())
+    .filter(r => r !== "");
+}
+
+/**
+ * সার্ভার থেকে আসা ফলাফল মেসেজ পার্স করে "পাওয়া যায়নি" ও "আগে হয়েছে" রোল লিস্ট বের করা
+ */
+function parseResultMessage(message) {
+  const notFound = [];
+  const duplicate = [];
+
+  const notFoundMatch = message.match(/❌ পাওয়া যায়নি:\s*([^\n]+)/);
+  if (notFoundMatch) {
+    notFoundMatch[1].split(',').forEach(r => notFound.push(r.trim()));
+  }
+
+  const dupMatch = message.match(/⚠️ আগে হয়েছে:\s*([^\n]+)/);
+  if (dupMatch) {
+    dupMatch[1].split(',').forEach(r => duplicate.push(r.trim()));
+  }
+
+  return { notFound, duplicate };
+}
+
+/**
+ * ✍️ ম্যানুয়াল রোল এন্ট্রি সাবমিট (স্ক্যান ছাড়া হাজিরা, ডুপ্লিকেট ডিটেক্ট সহ)
+ */
+async function submitManualRolls() {
+  const session = document.getElementById("sessionDrop").value;
+  const date = document.getElementById("attDate").value;
+  const rawInput = document.getElementById("manualRolls").value;
+
+  if (!session || !date) {
+    showStatus("⚠️ প্রথমে সেশন ও তারিখ সিলেক্ট করুন!", "warn");
+    return;
+  }
+
+  const rolls = parseRollString(rawInput);
+  if (rolls.length === 0) {
+    showStatus("⚠️ অন্তত একটি বৈধ রোল নম্বর লিখুন!", "warn");
+    return;
+  }
+
+  // যেসব রোল এই সেশনে ইতিমধ্যে (QR বা ম্যানুয়ালি) সফল হয়েছে সেগুলো লোকালি বাদ দেওয়া
+  const toSend = [];
+  const alreadyDone = [];
+  rolls.forEach(r => {
+    if (completedRolls.has(r)) {
+      alreadyDone.push(r);
+    } else {
+      toSend.push(r);
+    }
+  });
+
+  alreadyDone.forEach(r => {
+    addLog(r, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + r, "warn");
+  });
+
+  if (toSend.length === 0) {
+    showStatus("⚠️ সবগুলো রোল ইতিমধ্যে হাজিরা দেওয়া হয়ে গেছে!", "warn");
+    beepError();
+    return;
+  }
+
+  const btn = document.getElementById("manualSubmitBtn");
+  btn.disabled = true;
+  showStatus("⏳ " + toSend.length + "টি রোল প্রসেস হচ্ছে...", "info");
+
+  try {
+    const resp = await callApi({ action: "markAttendance", roll: toSend.join(","), session: session, date: date });
+
+    if (resp.success) {
+      const message = resp.data;
+      const { notFound, duplicate } = parseResultMessage(message);
+      const successRolls = toSend.filter(r => !notFound.includes(r) && !duplicate.includes(r));
+
+      successRolls.forEach(r => {
+        completedRolls.add(r);
+        const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        scanHistoryData.push({ roll: r, time: scanTime, status: "সফল" });
+        addLog(r, "✅ ম্যানুয়াল হাজিরা সম্পন্ন — রোল " + r, "ok");
+      });
+
+      duplicate.forEach(r => {
+        completedRolls.add(r);
+        addLog(r, "⚠️ আগেই হাজিরা দেওয়া আছে (শিটে) — রোল " + r, "warn");
+      });
+
+      notFound.forEach(r => {
+        addLog(r, "❌ রোল খুঁজে পাওয়া যায়নি — রোল " + r, "err");
+      });
+
+      if (successRolls.length > 0) {
+        document.getElementById("pdfBtn").disabled = false;
+      }
+
+      showStatus(message, successRolls.length > 0 ? "ok" : (notFound.length > 0 ? "err" : "warn"));
+      if (notFound.length > 0 || duplicate.length > 0) beepError(); else beep();
+
+      document.getElementById("manualRolls").value = "";
+    } else {
+      addLog("-", "❌ এরর: " + resp.error, "err");
+      showStatus("❌ এরর: " + resp.error, "err");
+      beepError();
+    }
+  } catch (e) {
+    addLog("-", "❌ সংযোগ ব্যর্থ", "err");
+    showStatus("❌ সংযোগ ব্যর্থ হয়েছে", "err");
+    beepError();
+  } finally {
+    btn.disabled = false;
   }
 }
 
