@@ -112,7 +112,7 @@
     </div>
     <div id="log"><p style="color:#64748b; font-size:13px;">এখনও কোনো স্ক্যান হয়নি।</p></div>
     
-    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()">📄 PDF রিপোর্ট সেভ করুন (নির্বাচিত সেশন ও তারিখের সম্পূর্ণ হাজিরা)</button>
+    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()">📄 PDF রিপোর্ট (নির্বাচিত সেশন ও তারিখের সম্পূর্ণ হাজিরা)</button>
   </div>
 </div>
 
@@ -489,11 +489,12 @@ function beepError() {
 }
 
 /**
- * 📄 PDF রিপোর্ট — সিলেক্ট করা সেশন ও তারিখের জন্য "Attendance" শিট থেকে
- * সম্পূর্ণ হাজিরা ডেটা সার্ভার থেকে টেনে এনে সরাসরি PDF ফাইল হিসেবে ডাউনলোড করা হয়
- * (window.open/print ডায়ালগ ব্যবহার করা হয় না বলে ইন-অ্যাপ ব্রাউজারেও (Facebook,
- * Messenger ইত্যাদির ভিতরের ব্রাউজার) কাজ করবে — html2canvas দিয়ে রিপোর্ট রেন্ডার
- * করে jsPDF দিয়ে সরাসরি ফাইল ডাউনলোড করা হয়)
+ * 📄 রিপোর্ট বাটনে ক্লিক করলে প্রথমে একটি প্রিভিউ (ভিউ) দেখানো হয়,
+ * তারপর সেই পেজেই "PDF ডাউনলোড করুন" বাটন থাকবে — যেটাতে ইউজার নিজে ক্লিক
+ * করলে তবেই ডাউনলোড শুরু হবে। কোনো Apps (Facebook/Messenger ইত্যাদি)-এর
+ * ভিতরের ব্রাউজার থেকে ওপেন করা হলে স্বয়ংক্রিয় (auto) ডাউনলোড প্রায়ই ব্লক
+ * হয়ে যায় — কিন্তু সরাসরি ইউজারের ক্লিকের মধ্যে থেকে ডাউনলোড শুরু করলে সেটা
+ * কাজ করার সম্ভাবনা অনেক বেশি।
  */
 async function generatePDF() {
   const session = document.getElementById("sessionDrop").value;
@@ -509,8 +510,6 @@ async function generatePDF() {
   btn.disabled = true;
   btn.innerText = "⏳ ডেটা আনা হচ্ছে...";
 
-  let reportEl = null;
-
   try {
     const resp = await callApi({ action: "searchAttendance", date: date, roll: "", session: session });
 
@@ -525,61 +524,104 @@ async function generatePDF() {
       return;
     }
 
+    showReportPreview(session, date, records);
+
+  } catch (e) {
+    console.error(e);
+    alert("❌ সংযোগ ব্যর্থ হয়েছে!");
+  } finally {
+    btn.disabled = false;
+    btn.innerText = originalText;
+  }
+}
+
+/**
+ * রিপোর্টের প্রিভিউ (ফুল-স্ক্রিন ওভারলে) দেখানো — এখানে সাধারণ HTML হিসেবেই
+ * রিপোর্টটি রেন্ডার হয় (তাই বাংলা ফন্ট স্বাভাবিকভাবেই দেখাবে), সাথে উপরে
+ * একটি ডাউনলোড ও একটি বন্ধ করার বাটন থাকবে।
+ */
+function showReportPreview(session, date, records) {
+  const existing = document.getElementById("pdfPreviewOverlay");
+  if (existing) existing.remove();
+
+  let tableRows = '';
+  records.forEach((item, index) => {
+    tableRows += `
+      <tr>
+        <td style="border:1px solid #333; padding:8px; text-align:center;">${index + 1}</td>
+        <td style="border:1px solid #333; padding:8px; text-align:center; font-weight:bold;">${item.roll}</td>
+        <td style="border:1px solid #333; padding:8px;">${item.name || ''}</td>
+        <td style="border:1px solid #333; padding:8px; text-align:center;">${item.group || ''}</td>
+        <td style="border:1px solid #333; padding:8px; text-align:center; color:#059669; font-weight:bold;">উপস্থিত</td>
+      </tr>
+    `;
+  });
+
+  const overlay = document.createElement('div');
+  overlay.id = 'pdfPreviewOverlay';
+  overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:9999; overflow-y:auto; display:flex; justify-content:center; padding:16px;';
+
+  overlay.innerHTML = `
+    <div style="width:100%; max-width:800px; height:fit-content;">
+      <div style="position:sticky; top:0; z-index:2; display:flex; gap:10px; padding:12px; background:#1e293b; border-radius:12px 12px 0 0;">
+        <button id="pdfDownloadBtn" style="flex:1; padding:12px; border:none; border-radius:8px; background:#3b82f6; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">⬇️ PDF ডাউনলোড করুন</button>
+        <button id="pdfCloseBtn" style="padding:12px 18px; border:none; border-radius:8px; background:#475569; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">✖️ বন্ধ করুন</button>
+      </div>
+      <div id="pdfReportContent" style="background:#ffffff; color:#000000; padding:24px; border-radius:0 0 12px 12px; font-family:'SolaimanLipi', Arial, sans-serif;">
+        <h2 style="text-align:center; margin-bottom:5px;">📋 হাজিরা রিপোর্ট</h2>
+        <div style="margin-bottom:20px; border-bottom:2px solid #000; padding-bottom:10px;">
+          <p style="margin:4px 0;"><strong>সেশন:</strong> ${session}</p>
+          <p style="margin:4px 0;"><strong>তারিখ:</strong> ${date}</p>
+          <p style="margin:4px 0;"><strong>মোট উপস্থিতি:</strong> ${records.length} জন</p>
+        </div>
+        <table style="width:100%; border-collapse:collapse; margin-top:10px;">
+          <thead>
+            <tr>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">ক্রমিক</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">রোল নম্বর</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">নাম</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">গ্রুপ</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">স্ট্যাটাস</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById("pdfCloseBtn").onclick = () => overlay.remove();
+
+  document.getElementById("pdfDownloadBtn").onclick = () => {
+    downloadReportAsPDF(document.getElementById("pdfReportContent"), session, date);
+  };
+}
+
+/**
+ * প্রিভিউ থেকে "PDF ডাউনলোড করুন" বাটনে ক্লিক করলে html2canvas দিয়ে রিপোর্ট
+ * ছবিতে রূপান্তর করে jsPDF দিয়ে সরাসরি ফাইল ডাউনলোড শুরু হয়। এই কলটি সরাসরি
+ * ইউজারের ক্লিক-হ্যান্ডলারের ভিতর থেকে হয় বলে ইন-অ্যাপ ব্রাউজারেও কাজ করার
+ * সম্ভাবনা বেশি।
+ */
+async function downloadReportAsPDF(reportContentEl, session, date) {
+  const btn = document.getElementById("pdfDownloadBtn");
+  const originalText = btn ? btn.innerText : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "⏳ PDF তৈরি হচ্ছে...";
+  }
+
+  try {
     if (typeof html2canvas === "undefined" || typeof window.jspdf === "undefined") {
       alert("❌ PDF লাইব্রেরি লোড হয়নি। ইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন।");
       return;
     }
 
-    btn.innerText = "⏳ PDF তৈরি হচ্ছে...";
-
-    let tableRows = '';
-    records.forEach((item, index) => {
-      tableRows += `
-        <tr>
-          <td style="border:1px solid #333; padding:8px; text-align:center;">${index + 1}</td>
-          <td style="border:1px solid #333; padding:8px; text-align:center; font-weight:bold;">${item.roll}</td>
-          <td style="border:1px solid #333; padding:8px;">${item.name || ''}</td>
-          <td style="border:1px solid #333; padding:8px; text-align:center;">${item.group || ''}</td>
-          <td style="border:1px solid #333; padding:8px; text-align:center; color:#059669; font-weight:bold;">উপস্থিত</td>
-        </tr>
-      `;
-    });
-
-    // স্ক্রিনের বাইরে একটি অস্থায়ী রিপোর্ট এলিমেন্ট তৈরি (html2canvas দিয়ে ছবি তোলার জন্য)
-    reportEl = document.createElement('div');
-    reportEl.style.position = 'fixed';
-    reportEl.style.top = '0';
-    reportEl.style.left = '-9999px';
-    reportEl.style.width = '760px';
-    reportEl.style.background = '#ffffff';
-    reportEl.style.color = '#000000';
-    reportEl.style.padding = '24px';
-    reportEl.style.fontFamily = "'SolaimanLipi', Arial, sans-serif";
-    reportEl.innerHTML = `
-      <h2 style="text-align:center; margin-bottom:5px;">📋 হাজিরা রিপোর্ট</h2>
-      <div style="margin-bottom:20px; border-bottom:2px solid #000; padding-bottom:10px;">
-        <p style="margin:4px 0;"><strong>সেশন:</strong> ${session}</p>
-        <p style="margin:4px 0;"><strong>তারিখ:</strong> ${date}</p>
-        <p style="margin:4px 0;"><strong>মোট উপস্থিতি:</strong> ${records.length} জন</p>
-      </div>
-      <table style="width:100%; border-collapse:collapse; margin-top:10px;">
-        <thead>
-          <tr>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">ক্রমিক</th>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">রোল নম্বর</th>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">নাম</th>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">গ্রুপ</th>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">স্ট্যাটাস</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tableRows}
-        </tbody>
-      </table>
-    `;
-    document.body.appendChild(reportEl);
-
-    const canvas = await html2canvas(reportEl, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    const canvas = await html2canvas(reportContentEl, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
 
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF('p', 'mm', 'a4');
@@ -609,9 +651,10 @@ async function generatePDF() {
     console.error(e);
     alert("❌ PDF তৈরি করা যায়নি। আবার চেষ্টা করুন।");
   } finally {
-    if (reportEl && reportEl.parentNode) reportEl.parentNode.removeChild(reportEl);
-    btn.disabled = false;
-    btn.innerText = originalText;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = originalText;
+    }
   }
 }
 </script>
