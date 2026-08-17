@@ -112,7 +112,7 @@
     </div>
     <div id="log"><p style="color:#64748b; font-size:13px;">এখনও কোনো স্ক্যান হয়নি।</p></div>
     
-    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()">📄 PDF রিপোর্ট (নির্বাচিত সেশন ও তারিখের সম্পূর্ণ হাজিরা)</button>
+    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()">📄 PDF রিপোর্ট সেভ করুন (নির্বাচিত সেশন ও তারিখের সম্পূর্ণ হাজিরা)</button>
   </div>
 </div>
 
@@ -544,6 +544,26 @@ function showReportPreview(session, date, records) {
   const existing = document.getElementById("pdfPreviewOverlay");
   if (existing) existing.remove();
 
+  // গ্রুপ অনুযায়ী উপস্থিতি গণনা (বিজ্ঞান, ব্যবসায় শিক্ষা, মানবিক ইত্যাদি)
+  const groupCounts = {};
+  records.forEach(item => {
+    const g = (item.group || '').toString().trim() || 'অনির্ধারিত';
+    groupCounts[g] = (groupCounts[g] || 0) + 1;
+  });
+
+  const preferredOrder = ['বিজ্ঞান', 'ব্যবসায় শিক্ষা', 'মানবিক'];
+  let groupSummaryHtml = '';
+  preferredOrder.forEach(g => {
+    if (groupCounts[g] !== undefined) {
+      groupSummaryHtml += `<p style="margin:4px 0;"><strong>${g}:</strong> ${groupCounts[g]} জন</p>`;
+      delete groupCounts[g];
+    }
+  });
+  // preferredOrder-এ নেই এমন কোনো গ্রুপ ডেটায় থাকলে সেগুলোও দেখানো
+  Object.keys(groupCounts).forEach(g => {
+    groupSummaryHtml += `<p style="margin:4px 0;"><strong>${g}:</strong> ${groupCounts[g]} জন</p>`;
+  });
+
   let tableRows = '';
   records.forEach((item, index) => {
     tableRows += `
@@ -568,11 +588,12 @@ function showReportPreview(session, date, records) {
         <button id="pdfCloseBtn" style="padding:12px 18px; border:none; border-radius:8px; background:#475569; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">✖️ বন্ধ করুন</button>
       </div>
       <div id="pdfReportContent" style="background:#ffffff; color:#000000; padding:24px; border-radius:0 0 12px 12px; font-family:'SolaimanLipi', Arial, sans-serif;">
-        <h2 style="text-align:center; margin-bottom:5px;">📋 হাজিরা রিপোর্ট</h2>
+        <h2 style="text-align:center; margin-bottom:5px; color:#000;">📋 হাজিরা রিপোর্ট</h2>
         <div style="margin-bottom:20px; border-bottom:2px solid #000; padding-bottom:10px;">
           <p style="margin:4px 0;"><strong>সেশন:</strong> ${session}</p>
           <p style="margin:4px 0;"><strong>তারিখ:</strong> ${date}</p>
           <p style="margin:4px 0;"><strong>মোট উপস্থিতি:</strong> ${records.length} জন</p>
+          ${groupSummaryHtml}
         </div>
         <table style="width:100%; border-collapse:collapse; margin-top:10px;">
           <thead>
