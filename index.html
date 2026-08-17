@@ -626,6 +626,19 @@ function showReportPreview(session, date, records, room) {
     groupSummaryHtml += `<p style="margin:4px 0;"><strong>${g}:</strong> ${groupCounts[g]} জন</p>`;
   });
 
+  // রুম অনুযায়ী উপস্থিতি গণনা (কোন রুমে কতজন) — All Room বাছাই করলে
+  // প্রতিটি রুমের আলাদা সংখ্যা দেখাবে, নির্দিষ্ট রুম বাছাই করলে শুধু ঐ রুমেরটাই আসবে
+  const roomCounts = {};
+  records.forEach(item => {
+    const r = (item.room || '').toString().trim() || 'অনির্ধারিত';
+    roomCounts[r] = (roomCounts[r] || 0) + 1;
+  });
+
+  let roomSummaryHtml = '';
+  Object.keys(roomCounts).sort().forEach(r => {
+    roomSummaryHtml += `<p style="margin:4px 0;"><strong>Room ${r}:</strong> ${roomCounts[r]} জন</p>`;
+  });
+
   let tableRows = '';
   records.forEach((item, index) => {
     tableRows += `
@@ -658,6 +671,8 @@ function showReportPreview(session, date, records, room) {
           <p style="margin:4px 0;"><strong>রুম:</strong> ${roomLabel}</p>
           <p style="margin:4px 0;"><strong>মোট উপস্থিতি:</strong> ${records.length} জন</p>
           ${groupSummaryHtml}
+          <p style="margin:10px 0 4px; font-weight:bold; border-top:1px dashed #999; padding-top:8px;">🏫 রুম অনুযায়ী উপস্থিতি:</p>
+          ${roomSummaryHtml}
         </div>
         <table style="width:100%; border-collapse:collapse; margin-top:10px;">
           <thead>
