@@ -121,15 +121,18 @@
   <div class="card">
     <label>📄 রিপোর্ট (সেশন ও তারিখ উপরে সিলেক্ট করা থাকতে হবে)</label>
     <div class="hint">রুম নম্বর সিলেক্ট করুন — শিট থেকে অটো লোড হবে</div>
-    <select id="roomReportDrop">
-      <option value="All">🏫 সকল রুম (All Room)</option>
-    </select>
+    <div style="display:flex; gap:8px;">
+      <select id="roomReportDrop" style="flex:1;">
+        <option value="All">🏫 সকল রুম (All Room)</option>
+      </select>
+      <button type="button" onclick="loadRoomList()" title="রুম লিস্ট রিফ্রেশ করুন" style="padding:0 16px; border:1px solid #334155; border-radius:8px; background:#0f172a; color:#fff; cursor:pointer; font-size:16px;">🔄</button>
+    </div>
     <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()">📄 PDF রিপোর্ট সেভ করুন</button>
   </div>
 </div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycby6TMxJ_-IzFx9w7MtRHea4KWfavi4btBFinRNDAkOn0_LVozhevimeJVLhFiYiCsYhhA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwOKUqnkjeI0pADpAfxSAvBpfU76pAdChfOMI2vkUIRk6PW7ZWF0nCjRM4lZk7dtBzOqA/exec";
 
 let html5QrCode = null;
 let scannedCount = 0;
@@ -317,6 +320,7 @@ async function processAttendanceAsync(roll, session, date, room) {
 
         addLog(roll, "✅ হাজিরা সম্পন্ন — রোল " + roll, "ok");
         showStatus("✅ রোল " + roll + " — হাজিরা সফল হয়েছে", "ok");
+        loadRoomList(); // নতুন রুমের ডেটা তৈরি হলে রিপোর্টের Room dropdown রিফ্রেশ করা
       } else if (msg.includes("আগে হয়েছে")) {
         completedRolls.add(roll);
         addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
@@ -480,6 +484,10 @@ async function submitManualRolls() {
 
       showStatus(message, successRolls.length > 0 ? "ok" : (notFound.length > 0 ? "err" : "warn"));
       if (notFound.length > 0 || duplicate.length > 0) beepError(); else beep();
+
+      if (successRolls.length > 0) {
+        loadRoomList(); // নতুন রুমের ডেটা তৈরি হলে রিপোর্টের Room dropdown রিফ্রেশ করা
+      }
 
       document.getElementById("manualRolls").value = "";
     } else {
