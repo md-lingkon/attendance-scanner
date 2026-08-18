@@ -136,6 +136,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbzitq2F2fZWF6_KZ6UYUvJ3
 
 let html5QrCode = null;
 let scannedCount = 0;
+let successMarkedCount = 0; // শুধুমাত্র নতুন/প্রকৃত সফল হাজিরার সংখ্যা (ডুপ্লিকেট বাদে)
 
 // প্রসেসিং অবস্থায় থাকা রোল ও শেষ স্ক্যান টাইমের রেকর্ড
 const activeProcessingRolls = new Set();
@@ -332,6 +333,7 @@ async function processAttendanceAsync(roll, session, date, room) {
         beepError();
       } else if (rollMatches(data.successRolls, roll)) {
         completedRolls.add(roll);
+        successMarkedCount++;
         
         const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         scanHistoryData.push({ roll: roll, time: scanTime, status: "সফল" });
@@ -482,6 +484,7 @@ async function submitManualRolls() {
 
         successRolls.forEach(r => {
           completedRolls.add(r);
+          successMarkedCount++;
           const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
           scanHistoryData.push({ roll: r, time: scanTime, status: "সফল" });
           addLog(r, "✅ ম্যানুয়াল হাজিরা সম্পন্ন — রোল " + r, "ok");
@@ -541,7 +544,7 @@ function showStatus(text, type) {
 
 function addLog(roll, text, type) {
   scannedCount++;
-  document.getElementById("countBadge").innerText = completedRolls.size + " জন (সফল)";
+  document.getElementById("countBadge").innerText = successMarkedCount + " জন (সফল)";
   const log = document.getElementById("log");
   if (scannedCount === 1) log.innerHTML = "";
   const item = document.createElement("div");
