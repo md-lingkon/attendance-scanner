@@ -265,10 +265,41 @@ function doGateLogout() {
   if (html5QrCode) { stopScanner(); }
   sessionStorage.removeItem(AUTH_KEY);
   resetScanState();
+  resetFormFields();
+
+  // খোলা থাকলে রিপোর্ট প্রিভিউ ও কাস্টম মোডাল বন্ধ করা
+  const existingPreview = document.getElementById("pdfPreviewOverlay");
+  if (existingPreview) existingPreview.remove();
+  closeAppModal();
+
   document.getElementById("mainApp").style.display = "none";
   document.getElementById("loginGate").style.display = "block";
   document.getElementById("gateUser").value = "";
   document.getElementById("gatePass").value = "";
+}
+
+/**
+ * সেশন/তারিখ/রুম ইনপুট ও রিপোর্টের Room ড্রপডাউন সহ সব ফর্ম-ফিল্ড রিসেট করা।
+ * লগআউটের সময় কল হয়, যাতে আগের ইনভিজিলেটরের সিলেকশন পরের লগইনে দেখা না যায়।
+ */
+function resetFormFields() {
+  const sessionDrop = document.getElementById("sessionDrop");
+  if (sessionDrop) sessionDrop.selectedIndex = 0;
+
+  const attDate = document.getElementById("attDate");
+  if (attDate) attDate.value = "";
+
+  const roomInput = document.getElementById("roomInput");
+  if (roomInput) roomInput.value = "";
+
+  const roomWarnHint = document.getElementById("roomWarnHint");
+  if (roomWarnHint) roomWarnHint.style.display = "none";
+
+  const rollWarnHint = document.getElementById("rollWarnHint");
+  if (rollWarnHint) rollWarnHint.style.display = "none";
+
+  const roomReportDrop = document.getElementById("roomReportDrop");
+  if (roomReportDrop) roomReportDrop.innerHTML = '<option value="All">🏫 সকল রুম (All Room)</option>';
 }
 
 function unlockApp() {
