@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QR হাজিরা স্ক্যানার</title>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -638,7 +636,7 @@ async function submitManualRolls() {
   });
 
   if (toSend.length === 0) {
-    showStatus("⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়ে গেছে!", "warn");
+    showStatus("⚠️ সবগুলো রোল ইতিমধ্যে হাজিরা দেওয়া হয়ে গেছে!", "warn");
     beepError();
     return;
   }
@@ -930,128 +928,77 @@ function showReportPreview(session, date, records, room) {
 }
 
 /**
- * প্রিভিউ থেকে "PDF ডাউনলোড করুন" বাটনে ক্লিক করলে html2canvas দিয়ে রিপোর্ট
- * ছবিতে রূপান্তর করে jsPDF দিয়ে সরাসরি ফাইল ডাউনলোড শুরু হয়। এই কলটি সরাসরি
- * ইউজারের ক্লিক-হ্যান্ডলারের ভিতর থেকে হয় বলে ইন-অ্যাপ ব্রাউজারেও কাজ করার
- * সম্ভাবনা বেশি। ফাইলের নামেও এখন রুম নম্বর যুক্ত থাকবে।
+ * 📄 প্রিভিউ থেকে "PDF ডাউনলোড করুন" বাটনে ক্লিক করলে রিপোর্টের সম্পূর্ণ HTML
+ * (টেবিল, স্টাইলিং, হেডার — সবকিছুসহ) দিয়ে একটা নতুন HTML পেজ বানানো হয়, সেটাকে
+ * Blob (type: 'text/html') হিসেবে নতুন ব্রাউজার ট্যাবে খোলা হয়। নতুন ট্যাবে
+ * "📥 Click to Download PDF / Print" বাটন থাকে — ক্লিক করলে window.print() কল
+ * হয়ে ব্রাউজারের প্রিন্ট ডায়ালগ ওপেন হয়, যেখান থেকে ইউজার "Save as PDF" সিলেক্ট
+ * করতে পারে (বা সরাসরি প্রিন্টারে পাঠাতে পারে)।
+ *
+ * html2canvas/jsPDF-এর বদলে এই পদ্ধতি ব্যবহারের কারণ: বাংলা টেক্সট ব্রাউজারের
+ * নিজস্ব রেন্ডারিং ইঞ্জিন দিয়েই আসল ভেক্টর টেক্সট হিসেবে প্রিন্ট হয় (কোনো
+ * ছবি-ভিত্তিক রূপান্তর লাগে না), তাই টেক্সট শার্প থাকে, সিলেক্ট/সার্চ করা যায়,
+ * এবং ফাইল সাইজও অনেক ছোট হয়।
  */
-/**
- * 📄 প্রিভিউ থেকে "PDF ডাউনলোড করুন" বাটনে ক্লিক করলে html2canvas + jsPDF দিয়ে
- * রিপোর্ট PDF আকারে ডাউনলোড হয়। বাংলা টেক্সট সরাসরি jsPDF এ ভেক্টর টেক্সট হিসেবে
- * বসালে ভুল রেন্ডার হয় (মাত্রা/যুক্তাক্ষর ভেঙে যায়, কারণ jsPDF জটিল বাংলা
- * টেক্সট-শেপিং সাপোর্ট করে না) — তাই ছবি-ভিত্তিক পদ্ধতিই ব্যবহার করা হচ্ছে,
- * কিন্তু দুইভাবে অপ্টিমাইজ করা হয়েছে:
- *  ১. প্রতিটি পেজ আলাদাভাবে ক্যাপচার হয়, টেবিলের কোনো রো যেন মাঝপথে না কাটে
- *     (আগে একটাই লম্বা ছবিকে যান্ত্রিকভাবে টুকরো করা হতো, তাতে রো মাঝপথে কাটা যেত)
- *  ২. PNG এর বদলে JPEG (কম্প্রেসড) ও মাঝারি স্কেল ব্যবহার করে ফাইল সাইজ অনেক
- *     ছোট রাখা হয়েছে
- */
-async function downloadReportAsPDF(reportContentEl, session, date, room) {
-  const btn = document.getElementById("pdfDownloadBtn");
-  const originalText = btn ? btn.innerText : '';
-  if (btn) {
-    btn.disabled = true;
-    btn.innerText = "⏳ PDF তৈরি হচ্ছে...";
+function downloadReportAsPDF(reportContentEl, session, date, room) {
+  const safeSession = session.toString().replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safeRoom = (!room || room === "All") ? "AllRooms" : room.toString().replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fileTitle = `Attendance_${safeSession}_${date}_${safeRoom}`;
+
+  const tableHtml = reportContentEl.innerHTML;
+
+  const fullHtml = `<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${fileTitle}</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'SolaimanLipi', Arial, sans-serif;
+    background: #f1f5f9;
+    margin: 0;
+    padding: 20px;
   }
-
-  // ক্যাপচারের জন্য তৈরি অস্থায়ী এলিমেন্টগুলো ট্র্যাক রাখা, শেষে পরিষ্কার করার জন্য
-  const tempEls = [];
-
-  try {
-    if (typeof html2canvas === "undefined" || typeof window.jspdf === "undefined") {
-      showAppModal("❌ PDF লাইব্রেরি লোড হয়নি। ইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন।");
-      return;
-    }
-
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const marginMM = 6;
-    const usableWidthMM = pdfWidth - marginMM * 2;
-    const usableHeightMM = pdfHeight - marginMM * 2;
-
-    const headerEl = reportContentEl.querySelector('#pdfHeaderBlock');
-    const table = reportContentEl.querySelector('table');
-    const thead = table.querySelector('thead');
-    const bodyRows = Array.from(table.querySelectorAll('tbody tr'));
-    const contentWidthPx = reportContentEl.clientWidth || 750;
-
-    const SCALE = 1.5; // মাঝারি স্কেল — স্পষ্টও থাকবে, ফাইল সাইজও অনেক কম থাকবে
-    const JPEG_QUALITY = 0.85;
-    // usableHeightMM কে px এ রূপান্তর (96dpi ভিত্তিতে) যাতে বোঝা যায় একটা পেজে
-    // (বিল্ড করা div এর নিজস্ব, আন-স্কেলড উচ্চতা হিসেবে) কতটুকু জায়গা ধরে
-    const maxPagePx = (usableHeightMM / 25.4) * 96;
-
-    let rowIndex = 0;
-    let isFirstPage = true;
-
-    // রেকর্ড না থাকলেও (থিওরিটিক্যালি) অন্তত একটা পেজ তৈরি হবে
-    do {
-      const pageDiv = document.createElement('div');
-      pageDiv.style.cssText = `position:absolute; left:-99999px; top:0; background:#ffffff; color:#000000; font-family:'SolaimanLipi', Arial, sans-serif; width:${contentWidthPx}px; padding:16px; box-sizing:border-box;`;
-      document.body.appendChild(pageDiv);
-      tempEls.push(pageDiv);
-
-      if (isFirstPage && headerEl) {
-        pageDiv.appendChild(headerEl.cloneNode(true));
-      }
-
-      const pageTable = document.createElement('table');
-      pageTable.style.cssText = 'width:100%; border-collapse:collapse; margin-top:10px;';
-      pageTable.appendChild(thead.cloneNode(true));
-      const tbody = document.createElement('tbody');
-      pageTable.appendChild(tbody);
-      pageDiv.appendChild(pageTable);
-
-      // একটা একটা করে রো যোগ করে উচ্চতা মাপা — যেই রো যোগ করলে পেজের সীমা
-      // ছাড়িয়ে যায়, সেটাকে সরিয়ে পরের পেজে পাঠানো হয় (তাই কোনো রো মাঝপথে কাটে না)
-      let addedInThisPage = 0;
-      while (rowIndex < bodyRows.length) {
-        const clonedRow = bodyRows[rowIndex].cloneNode(true);
-        tbody.appendChild(clonedRow);
-        addedInThisPage++;
-
-        if (pageDiv.scrollHeight > maxPagePx && addedInThisPage > 1) {
-          tbody.removeChild(clonedRow); // সীমা ছাড়ানো রো টা এই পেজ থেকে বাদ
-          addedInThisPage--;
-          break;
-        }
-        rowIndex++;
-      }
-
-      // যদি একটা রো ও না ধরে (অস্বাভাবিক এক্সট্রিম কেস, খুব বড় রো), তবু
-      // অন্তত একটা রো রেখেই এগিয়ে যাওয়া, যাতে অসীম লুপ না হয়
-      if (addedInThisPage === 0 && rowIndex < bodyRows.length) {
-        tbody.appendChild(bodyRows[rowIndex].cloneNode(true));
-        rowIndex++;
-      }
-
-      const canvas = await html2canvas(pageDiv, { scale: SCALE, backgroundColor: '#ffffff', useCORS: true });
-      const imgData = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-      const imgWidthMM = usableWidthMM;
-      const imgHeightMM = Math.min((canvas.height * imgWidthMM) / canvas.width, usableHeightMM);
-
-      if (!isFirstPage) pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', marginMM, marginMM, imgWidthMM, imgHeightMM);
-
-      isFirstPage = false;
-    } while (rowIndex < bodyRows.length);
-
-    const safeSession = session.toString().replace(/[^a-zA-Z0-9_-]/g, '_');
-    const safeRoom = (!room || room === "All") ? "AllRooms" : room.toString().replace(/[^a-zA-Z0-9_-]/g, '_');
-    pdf.save(`Attendance_${safeSession}_${date}_${safeRoom}.pdf`);
-
-  } catch (e) {
-    console.error(e);
-    showAppModal("❌ PDF তৈরি করা যায়নি। আবার চেষ্টা করুন।");
-  } finally {
-    tempEls.forEach(el => { if (el.parentNode) el.parentNode.removeChild(el); });
-    if (btn) {
-      btn.disabled = false;
-      btn.innerText = originalText;
-    }
+  .toolbar {
+    position: sticky; top: 0; z-index: 10;
+    max-width: 800px; margin: 0 auto 16px;
+    background: #1e293b; padding: 14px; border-radius: 10px;
+    text-align: center;
   }
+  .toolbar button {
+    padding: 12px 28px; border: none; border-radius: 8px;
+    background: #3b82f6; color: #fff; font-weight: bold;
+    font-size: 15px; cursor: pointer;
+  }
+  .toolbar button:hover { background: #2563eb; }
+  .toolbar p { color: #94a3b8; font-size: 12px; margin: 8px 0 0; }
+  .report-box {
+    background: #ffffff; color: #000000; padding: 24px;
+    border-radius: 10px; max-width: 800px; margin: 0 auto;
+    font-family: 'SolaimanLipi', Arial, sans-serif;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  @media print {
+    .toolbar { display: none; }
+    body { background: #fff; padding: 0; }
+    .report-box { border-radius: 0; padding: 0; max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">📥 Click to Download PDF / Print</button>
+    <p>বাটনে ক্লিক করে প্রিন্ট ডায়ালগ থেকে "Save as PDF" সিলেক্ট করুন</p>
+  </div>
+  <div class="report-box">${tableHtml}</div>
+</body>
+</html>`;
+
+  const blob = new Blob([fullHtml], { type: 'text/html' });
+  const blobUrl = URL.createObjectURL(blob);
+  window.open(blobUrl, '_blank');
 }
 </script>
 </body>
