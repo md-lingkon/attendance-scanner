@@ -132,7 +132,7 @@
 </div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbwOKUqnkjeI0pADpAfxSAvBpfU76pAdChfOMI2vkUIRk6PW7ZWF0nCjRM4lZk7dtBzOqA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzitq2F2fZWF6_KZ6UYUvJ3HhgWDfMLF8UcCkmjKzUTtn-rAdueBwCJG-ru_DjbqYqJXA/exec";
 
 let html5QrCode = null;
 let scannedCount = 0;
@@ -249,6 +249,19 @@ function stopScanner() {
   }
 }
 
+/**
+ * সার্ভার থেকে আসা রোল লিস্টে (successRolls/duplicateRolls/notFoundRolls) কোনো
+ * নির্দিষ্ট রোল আছে কিনা যাচাই করা — আগে স্ট্রিং হিসেবে, না মিললে সংখ্যা হিসেবে
+ * (যেমন "012" বনাম "12" এর মতো ফরম্যাটিং ভিন্নতা থাকলেও সঠিকভাবে মিলবে)
+ */
+function rollMatches(list, roll) {
+  if (!list || !Array.isArray(list)) return false;
+  if (list.includes(roll)) return true;
+  const n = parseInt(roll, 10);
+  if (isNaN(n)) return false;
+  return list.some(x => parseInt(x, 10) === n);
+}
+
 function extractRollNumber(decodedText) {
   if (!decodedText) return null;
   let text = decodedText.trim();
@@ -311,8 +324,13 @@ async function processAttendanceAsync(roll, session, date, room) {
     const resp = await callApi({ action: "markAttendance", roll: roll, session: session, date: date, room: room });
     
     if (resp.success) {
-      const msg = resp.data;
-      if (msg.includes("সফল") && !msg.includes("পাওয়া যায়নি") && !msg.includes("আগে হয়েছে")) {
+      const data = resp.data;
+
+      if (data.error) {
+        addLog(roll, "❌ এরর: " + data.message, "err");
+        showStatus("❌ এরর: " + data.message, "err");
+        beepError();
+      } else if (rollMatches(data.successRolls, roll)) {
         completedRolls.add(roll);
         
         const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -321,14 +339,22 @@ async function processAttendanceAsync(roll, session, date, room) {
         addLog(roll, "✅ হাজিরা সম্পন্ন — রোল " + roll, "ok");
         showStatus("✅ রোল " + roll + " — হাজিরা সফল হয়েছে", "ok");
         loadRoomList(); // নতুন রুমের ডেটা তৈরি হলে রিপোর্টের Room dropdown রিফ্রেশ করা
-      } else if (msg.includes("আগে হয়েছে")) {
+      } else if (rollMatches(data.duplicateRolls, roll)) {
         completedRolls.add(roll);
         addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
         showStatus("⚠️ রোল " + roll + " — আগেই হাজিরা দেওয়া হয়েছে", "warn");
         beepError();
-      } else {
+      } else if (rollMatches(data.notFoundRolls, roll)) {
         addLog(roll, "❌ রোল খুঁজে পাওয়া যায়নি — রোল " + roll, "err");
         showStatus("❌ রোল " + roll + " — সেশনে পাওয়া যায়নি", "err");
+        beepError();
+      } else if (data.invalidRolls && data.invalidRolls.includes(roll)) {
+        addLog(roll, "🚫 বৈধ রোল নম্বর নয় (QR কোড ভুল হতে পারে) — " + roll, "err");
+        showStatus("🚫 QR কোডে বৈধ রোল নম্বর পাওয়া যায়নি!", "err");
+        beepError();
+      } else {
+        addLog(roll, "❌ অজানা সমস্যা হয়েছে — রোল " + roll, "err");
+        showStatus("❌ অজানা সমস্যা হয়েছে", "err");
         beepError();
       }
     } else {
@@ -394,26 +420,6 @@ function parseRollString(str) {
 }
 
 /**
- * সার্ভার থেকে আসা ফলাফল মেসেজ পার্স করে "পাওয়া যায়নি" ও "আগে হয়েছে" রোল লিস্ট বের করা
- */
-function parseResultMessage(message) {
-  const notFound = [];
-  const duplicate = [];
-
-  const notFoundMatch = message.match(/❌ পাওয়া যায়নি:\s*([^\n]+)/);
-  if (notFoundMatch) {
-    notFoundMatch[1].split(',').forEach(r => notFound.push(r.trim()));
-  }
-
-  const dupMatch = message.match(/⚠️ আগে হয়েছে:\s*([^\n]+)/);
-  if (dupMatch) {
-    dupMatch[1].split(',').forEach(r => duplicate.push(r.trim()));
-  }
-
-  return { notFound, duplicate };
-}
-
-/**
  * ✍️ ম্যানুয়াল রোল এন্ট্রি সাবমিট (স্ক্যান ছাড়া হাজিরা, ডুপ্লিকেট ডিটেক্ট সহ)
  */
 async function submitManualRolls() {
@@ -462,34 +468,48 @@ async function submitManualRolls() {
     const resp = await callApi({ action: "markAttendance", roll: toSend.join(","), session: session, date: date, room: room });
 
     if (resp.success) {
-      const message = resp.data;
-      const { notFound, duplicate } = parseResultMessage(message);
-      const successRolls = toSend.filter(r => !notFound.includes(r) && !duplicate.includes(r));
+      const data = resp.data;
 
-      successRolls.forEach(r => {
-        completedRolls.add(r);
-        const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        scanHistoryData.push({ roll: r, time: scanTime, status: "সফল" });
-        addLog(r, "✅ ম্যানুয়াল হাজিরা সম্পন্ন — রোল " + r, "ok");
-      });
+      if (data.error) {
+        addLog("-", "❌ এরর: " + data.message, "err");
+        showStatus("❌ এরর: " + data.message, "err");
+        beepError();
+      } else {
+        const successRolls = data.successRolls || [];
+        const duplicate = data.duplicateRolls || [];
+        const notFound = data.notFoundRolls || [];
+        const invalid = data.invalidRolls || [];
 
-      duplicate.forEach(r => {
-        completedRolls.add(r);
-        addLog(r, "⚠️ আগেই হাজিরা দেওয়া আছে (শিটে) — রোল " + r, "warn");
-      });
+        successRolls.forEach(r => {
+          completedRolls.add(r);
+          const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          scanHistoryData.push({ roll: r, time: scanTime, status: "সফল" });
+          addLog(r, "✅ ম্যানুয়াল হাজিরা সম্পন্ন — রোল " + r, "ok");
+        });
 
-      notFound.forEach(r => {
-        addLog(r, "❌ রোল খুঁজে পাওয়া যায়নি — রোল " + r, "err");
-      });
+        duplicate.forEach(r => {
+          completedRolls.add(r);
+          addLog(r, "⚠️ আগেই হাজিরা দেওয়া আছে (শিটে) — রোল " + r, "warn");
+        });
 
-      showStatus(message, successRolls.length > 0 ? "ok" : (notFound.length > 0 ? "err" : "warn"));
-      if (notFound.length > 0 || duplicate.length > 0) beepError(); else beep();
+        notFound.forEach(r => {
+          addLog(r, "❌ রোল খুঁজে পাওয়া যায়নি — রোল " + r, "err");
+        });
 
-      if (successRolls.length > 0) {
-        loadRoomList(); // নতুন রুমের ডেটা তৈরি হলে রিপোর্টের Room dropdown রিফ্রেশ করা
+        invalid.forEach(r => {
+          addLog(r, "🚫 বৈধ রোল নম্বর নয় — " + r, "err");
+        });
+
+        const hasIssue = duplicate.length > 0 || notFound.length > 0 || invalid.length > 0;
+        showStatus(data.message, successRolls.length > 0 ? "ok" : (hasIssue ? "err" : "warn"));
+        if (hasIssue) beepError(); else beep();
+
+        if (successRolls.length > 0) {
+          loadRoomList(); // নতুন রুমের ডেটা তৈরি হলে রিপোর্টের Room dropdown রিফ্রেশ করা
+        }
+
+        document.getElementById("manualRolls").value = "";
       }
-
-      document.getElementById("manualRolls").value = "";
     } else {
       addLog("-", "❌ এরর: " + resp.error, "err");
       showStatus("❌ এরর: " + resp.error, "err");
