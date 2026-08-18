@@ -86,7 +86,7 @@
   }
   #appModalOkBtn:hover { background: #2563eb; }
 
-  /* 🖨️ প্রিন্ট/PDF সেভ করার জন্য সংশোধিত CSS */
+  /* 🖨️ প্রিন্ট/PDF সেভ করার জন্য সংশোধিত CSS (কালো বিট ও ডুপ্লিকেট সমস্যা সমাধান) */
 @media print {
   /* ১. মূল পেজ, ওভারলে এবং অপ্রয়োজনীয় এলিমেন্ট হাইড করা */
   body, body * {
@@ -120,14 +120,14 @@
     box-shadow: none !important;
   }
 
-  /* ৫. ব্যাকগ্রাউন্ড ওভারলে ও প্রিন্ট/ব্যাক বাটন প্রিন্ট থেকে সম্পূর্ণ বাদ দেওয়া */
+  /* ৫. ব্যাকগ্রাউন্ড ওভারলে ও প্রিন্ট বাটন প্রিন্ট থেকে সম্পূর্ণ বাদ দেওয়া */
   #pdfPreviewOverlay {
     position: static !important;
     background: transparent !important;
     padding: 0 !important;
   }
   
-  #pdfPrintBtn, #pdfBackBtn {
+  #pdfPrintBtn {
     display: none !important;
   }
 }
@@ -135,7 +135,7 @@
 </head>
 <body>
 
-<!-- 🔔 কাস্টম মোডাল -->
+<!-- 🔔 কাস্টম মোডাল — সব alert() এর বদলে এটা ব্যবহার হবে, ব্রাউজারের নিজস্ব পপআপ (যেখানে সাইটের URL দেখায়) এড়াতে -->
 <div id="appModalOverlay">
   <div id="appModalBox">
     <div id="appModalMsg"></div>
@@ -143,7 +143,7 @@
   </div>
 </div>
 
-<!-- 🔒 পাসওয়ার্ড গেট -->
+<!-- 🔒 পাসওয়ার্ড গেট — সঠিক লগইন না দেওয়া পর্যন্ত মূল অ্যাপ হাইড থাকবে -->
 <div id="loginGate" class="wrap" style="padding-top:60px;">
   <div class="card" style="max-width:340px; margin:0 auto;">
     <h2 style="text-align:center; margin-top:0;">🔒 লগইন করুন</h2>
@@ -161,7 +161,7 @@
   </div>
 </div>
 
-<!-- ✅ মূল অ্যাপ -->
+<!-- ✅ মূল অ্যাপ — লগইন সফল হলেই দেখা যাবে -->
 <div class="wrap" id="mainApp" style="display:none;">
   <div style="display:flex; justify-content:flex-end; margin-bottom:-10px;">
     <button onclick="doGateLogout()" style="background:none; border:1px solid #334155; color:#94a3b8; padding:6px 14px; border-radius:20px; font-size:12px; cursor:pointer;">🔓 লগআউট</button>
@@ -218,7 +218,7 @@
       </select>
       <button type="button" onclick="loadRoomList()" title="রুম লিস্ট রিফ্রেশ করুন" style="padding:0 16px; border:1px solid #334155; border-radius:8px; background:#0f172a; color:#fff; cursor:pointer; font-size:16px;">🔄</button>
     </div>
-    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()">📄 PDF রিপোর্ট দেখুন</button>
+    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()">📄 PDF রিপোর্ট সেভ করুন</button>
   </div>
 </div>
 
@@ -227,8 +227,9 @@ const API_URL = "https://script.google.com/macros/s/AKfycbyfjsy3a1-DOirj1318juhX
 
 let html5QrCode = null;
 let scannedCount = 0;
-let successMarkedCount = 0;
+let successMarkedCount = 0; // শুধুমাত্র নতুন/প্রকৃত সফল হাজিরার সংখ্যা (ডুপ্লিকেট বাদে)
 
+// প্রসেসিং অবস্থায় থাকা রোল ও শেষ স্ক্যান টাইমের রেকর্ড
 const activeProcessingRolls = new Set();
 const completedRolls = new Set();
 const scanHistoryData = [];
@@ -243,9 +244,10 @@ async function callApi(payload) {
   return res.json();
 }
 
-const AUTH_KEY = "qr_scanner_auth";
+const AUTH_KEY = "qr_scanner_auth"; // sessionStorage কী — শুধু এই ট্যাব খোলা থাকা পর্যন্ত মনে থাকবে
 
 window.addEventListener('DOMContentLoaded', () => {
+  // আগে থেকে এই ট্যাবে লগইন করা থাকলে সরাসরি মূল অ্যাপ দেখানো, নাহলে লগইন গেট
   if (sessionStorage.getItem(AUTH_KEY) === "1") {
     unlockApp();
   } else {
@@ -253,10 +255,14 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById("mainApp").style.display = "none";
   }
 
+  // এন্টার প্রেস করলেও লগইন হবে
   document.getElementById("gateUser").addEventListener("keypress", e => { if (e.key === "Enter") doGateLogin(); });
   document.getElementById("gatePass").addEventListener("keypress", e => { if (e.key === "Enter") doGateLogin(); });
 });
 
+/**
+ * সার্ভারে (Login শিটের বিপরীতে) ইউজারনেম/পাসওয়ার্ড যাচাই করে গেট খোলা
+ */
 async function doGateLogin() {
   const user = document.getElementById("gateUser").value.trim();
   const pass = document.getElementById("gatePass").value;
@@ -305,6 +311,7 @@ function doGateLogout() {
   resetScanState();
   resetFormFields();
 
+  // খোলা থাকলে রিপোর্ট প্রিভিউ ও কাস্টম মোডাল বন্ধ করা
   const existingPreview = document.getElementById("pdfPreviewOverlay");
   if (existingPreview) existingPreview.remove();
   closeAppModal();
@@ -315,6 +322,10 @@ function doGateLogout() {
   document.getElementById("gatePass").value = "";
 }
 
+/**
+ * সেশন/তারিখ/রুম ইনপুট ও রিপোর্টের Room ড্রপডাউন সহ সব ফর্ম-ফিল্ড রিসেট করা।
+ * লগআউটের সময় কল হয়, যাতে আগের ইনভিজিলেটরের সিলেকশন পরের লগইনে দেখা না যায়।
+ */
 function resetFormFields() {
   const sessionDrop = document.getElementById("sessionDrop");
   if (sessionDrop) sessionDrop.selectedIndex = 0;
@@ -336,12 +347,17 @@ function resetFormFields() {
 }
 
 function unlockApp() {
-  resetScanState();
+  resetScanState(); // নতুন লগইনে আগের স্ক্যান হিস্ট্রি/কাউন্ট যেন বহন না হয়ে আসে
   document.getElementById("loginGate").style.display = "none";
   document.getElementById("mainApp").style.display = "block";
   initApp();
 }
 
+/**
+ * স্ক্যান-সম্পর্কিত সব ইন-মেমোরি স্টেট (লগ, সফল/ডুপ্লিকেট রোল সেট, কাউন্টার,
+ * ম্যানুয়াল ইনপুট) রিসেট করা। লগআউট বা নতুন লগইনের সময় কল হয়, যাতে আগের
+ * সেশনের হিস্ট্রি নতুন সেশনে দেখা না যায়।
+ */
 function resetScanState() {
   completedRolls.clear();
   activeProcessingRolls.clear();
@@ -384,10 +400,15 @@ async function initApp() {
     console.error(e);
   }
 
+  // সেশন বা তারিখ পরিবর্তন হলে রিপোর্টের Room ড্রপডাউন অটো রিফ্রেশ হবে
   document.getElementById("sessionDrop").addEventListener("change", loadRoomList);
   document.getElementById("attDate").addEventListener("change", loadRoomList);
 }
 
+/**
+ * নির্বাচিত সেশন ও তারিখের জন্য শিটে যেসব Room No তে হাজিরা নেওয়া হয়েছে
+ * সেগুলো সার্ভার থেকে এনে "রিপোর্ট" এর Room ড্রপডাউনে বসানো, "All Room" সহ।
+ */
 async function loadRoomList() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
@@ -454,6 +475,11 @@ function stopScanner() {
   }
 }
 
+/**
+ * সার্ভার থেকে আসা রোল লিস্টে (successRolls/duplicateRolls/notFoundRolls) কোনো
+ * নির্দিষ্ট রোল আছে কিনা যাচাই করা — আগে স্ট্রিং হিসেবে, না মিললে সংখ্যা হিসেবে
+ * (যেমন "012" বনাম "12" এর মতো ফরম্যাটিং ভিন্নতা থাকলেও সঠিকভাবে মিলবে)
+ */
 function rollMatches(list, roll) {
   if (!list || !Array.isArray(list)) return false;
   if (list.includes(roll)) return true;
@@ -485,21 +511,27 @@ function extractRollNumber(decodedText) {
   return text;
 }
 
+/**
+ * ⚡ দ্রুত অটোমেটিক স্ক্যান লজিক (Camera Pause হবে না)
+ */
 function onScanSuccess(decodedText) {
   const roll = extractRollNumber(decodedText);
 
   if (!roll) return;
 
+  // ১. যদি ইতোমধ্যে সফল হাজিরা দেওয়া হয়ে থাকে
   if (completedRolls.has(roll)) {
     beepError();
     showStatus(`⚠️ রোল ${roll} ইতিমধ্যে স্ক্যান করা হয়েছে!`, "warn");
     return;
   }
 
+  // ২. যদি ব্যাকগ্রাউন্ডে প্রসেসিং অবস্থায় থাকে
   if (activeProcessingRolls.has(roll)) {
     return; 
   }
 
+  // প্রসেসিং সেটে রোলটি মার্ক করা
   activeProcessingRolls.add(roll);
   beep();
 
@@ -509,6 +541,7 @@ function onScanSuccess(decodedText) {
 
   showStatus("⏳ রোল " + roll + " প্রসেস হচ্ছে...", "info");
 
+  // ব্যাকগ্রাউন্ডে অটো প্রসেস করা (ক্যামেরা চালু থাকবে)
   processAttendanceAsync(roll, session, date, room);
 }
 
@@ -532,7 +565,7 @@ async function processAttendanceAsync(roll, session, date, room) {
 
         addLog(roll, "✅ হাজিরা সম্পন্ন — রোল " + roll, "ok");
         showStatus("✅ রোল " + roll + " — হাজিরা সফল হয়েছে", "ok");
-        loadRoomList();
+        loadRoomList(); // নতুন রুমের ডেটা তৈরি হলে রিপোর্টের Room dropdown রিফ্রেশ করা
       } else if (rollMatches(data.duplicateRolls, roll)) {
         completedRolls.add(roll);
         addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
@@ -561,10 +594,15 @@ async function processAttendanceAsync(roll, session, date, room) {
     showStatus("❌ সংযোগ ব্যর্থ হয়েছে", "err");
     beepError();
   } finally {
+    // প্রসেসিং শেষ হলে থ্রোটল সেট থেকে সরিয়ে দেওয়া
     activeProcessingRolls.delete(roll);
   }
 }
 
+/**
+ * রোল টেক্সটবক্সে শুধু ইংরেজি সংখ্যা (0-9), কমা ও স্পেস ছাড়া অন্য কিছু
+ * (যেমনঃ বাংলা সংখ্যা ০-৯ বা অন্য কোনো ভাষার অক্ষর) টাইপ করলে সাথে সাথে বাদ দেওয়া
+ */
 function sanitizeRollInput(el) {
   const original = el.value;
   const cleaned = original.replace(/[^0-9,\s]/g, '');
@@ -580,6 +618,10 @@ function sanitizeRollInput(el) {
   }
 }
 
+/**
+ * Room No বক্সে শুধুমাত্র ইংরেজি অক্ষর (A-Z, a-z), সংখ্যা (0-9), হাইফেন (-)
+ * ও স্পেস ছাড়া অন্য কিছু (যেমন বাংলা অক্ষর) টাইপ করলে সাথে সাথে বাদ দেওয়া
+ */
 function sanitizeRoomInput(el) {
   const original = el.value;
   const cleaned = original.replace(/[^A-Za-z0-9\-\s]/g, '');
@@ -595,12 +637,18 @@ function sanitizeRoomInput(el) {
   }
 }
 
+/**
+ * কমা দিয়ে আলাদা করা রোল স্ট্রিং থেকে পরিষ্কার (trim করা) রোল লিস্ট বের করা
+ */
 function parseRollString(str) {
   return str.toString().split(',')
     .map(r => r.trim())
     .filter(r => r !== "");
 }
 
+/**
+ * ✍️ ম্যানুয়াল রোল এন্ট্রি সাবমিট (স্ক্যান ছাড়া হাজিরা, ডুপ্লিকেট ডিটেক্ট সহ)
+ */
 async function submitManualRolls() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
@@ -618,6 +666,7 @@ async function submitManualRolls() {
     return;
   }
 
+  // যেসব রোল এই সেশনে ইতিমধ্যে (QR বা ম্যানুয়ালি) সফল হয়েছে সেগুলো লোকালি বাদ দেওয়া
   const toSend = [];
   const alreadyDone = [];
   rolls.forEach(r => {
@@ -633,7 +682,7 @@ async function submitManualRolls() {
   });
 
   if (toSend.length === 0) {
-    showStatus("⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়ে গেছে!", "warn");
+    showStatus("⚠️ সবগুলো রোল ইতিমধ্যে হাজিরা দেওয়া হয়ে গেছে!", "warn");
     beepError();
     return;
   }
@@ -684,7 +733,7 @@ async function submitManualRolls() {
         if (hasIssue) beepError(); else beep();
 
         if (successRolls.length > 0) {
-          loadRoomList();
+          loadRoomList(); // নতুন রুমের ডেটা তৈরি হলে রিপোর্টের Room dropdown রিফ্রেশ করা
         }
 
         document.getElementById("manualRolls").value = "";
@@ -730,6 +779,10 @@ function addLog(roll, text, type) {
   log.prepend(item);
 }
 
+/**
+ * 🔔 কাস্টম মোডাল দেখানো — ব্রাউজারের নেটিভ alert() এর বদলে, যাতে
+ * "script.google.com says" এর মতো সোর্স/URL না দেখায়
+ */
 function showAppModal(message) {
   document.getElementById("appModalMsg").innerText = message;
   document.getElementById("appModalOverlay").style.display = "flex";
@@ -765,6 +818,12 @@ function beepError() {
   } catch (e) {}
 }
 
+/**
+ * 📄 রিপোর্ট বাটনে ক্লিক করলে প্রথমে একটি প্রিভিউ (ভিউ) দেখানো হয়,
+ * তারপর সেই পেজেই "PDF ডাউনলোড করুন" বাটন থাকবে — যেটাতে ইউজার নিজে ক্লিক
+ * করলে তবেই ডাউনলোড শুরু হবে। এখন সাথে Room No অনুযায়ীও ফিল্টার করা যায়
+ * ("সকল রুম" অথবা নির্দিষ্ট একটি রুম)।
+ */
 async function generatePDF() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
@@ -805,12 +864,21 @@ async function generatePDF() {
   }
 }
 
+/**
+ * রিপোর্টের প্রিভিউ (ফুল-স্ক্রিন ওভারলে) দেখানো — এখানে সাধারণ HTML হিসেবেই
+ * রিপোর্টটি রেন্ডার হয় (তাই বাংলা ফন্ট স্বাভাবিকভাবেই দেখাবে)। উপরে শুধু একটি
+ * "📥 Click to Download PDF / Print" বাটন থাকে — ক্লিক করলে সরাসরি window.print()
+ * কল হয়ে ব্রাউজারের প্রিন্ট ডায়ালগ খোলে, যেখান থেকে "Save as PDF" সিলেক্ট করা
+ * যায়। আলাদা কোনো "ডাউনলোড" বা "বন্ধ করুন" বাটন নেই — ওভারলের বাইরে ক্লিক করলে
+ * বা Escape চাপলে প্রিভিউ বন্ধ হয়ে যাবে। এখন রুম নম্বরও দেখানো হয়।
+ */
 function showReportPreview(session, date, records, room) {
   const existing = document.getElementById("pdfPreviewOverlay");
   if (existing) existing.remove();
 
   const roomLabel = (!room || room === "All") ? "সকল রুম (All Room)" : ("Room " + room);
 
+  // গ্রুপ অনুযায়ী উপস্থিতি গণনা (বিজ্ঞান, ব্যবসায় শিক্ষা, মানবিক ইত্যাদি)
   const groupCounts = {};
   records.forEach(item => {
     const g = (item.group || '').toString().trim() || 'অনির্ধারিত';
@@ -825,10 +893,13 @@ function showReportPreview(session, date, records, room) {
       delete groupCounts[g];
     }
   });
+  // preferredOrder-এ নেই এমন কোনো গ্রুপ ডেটায় থাকলে সেগুলোও দেখানো
   Object.keys(groupCounts).forEach(g => {
     groupSummaryHtml += `<p style="margin:4px 0;"><strong>${g}:</strong> ${groupCounts[g]} জন</p>`;
   });
 
+  // রুম অনুযায়ী উপস্থিতি গণনা (কোন রুমে কতজন) — All Room বাছাই করলে
+  // প্রতিটি রুমের আলাদা সংখ্যা দেখাবে, নির্দিষ্ট রুম বাছাই করলে শুধু ঐ রুমেরটাই আসবে
   const roomCounts = {};
   records.forEach(item => {
     const r = (item.room || '').toString().trim() || 'অনির্ধারিত';
@@ -860,9 +931,8 @@ function showReportPreview(session, date, records, room) {
 
   overlay.innerHTML = `
     <div id="pdfPreviewBox" style="width:100%; max-width:800px; height:fit-content;">
-      <div style="position:sticky; top:0; z-index:2; padding:12px; background:#1e293b; border-radius:12px 12px 0 0; display:flex; gap:10px;">
-        <button id="pdfPrintBtn" style="flex:1; padding:14px; border:none; border-radius:8px; background:#3b82f6; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">📥 Click to Download PDF / Print</button>
-        <button id="pdfBackBtn" style="padding:14px 20px; border:none; border-radius:8px; background:#64748b; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">⬅️ Back</button>
+      <div style="position:sticky; top:0; z-index:2; padding:12px; background:#1e293b; border-radius:12px 12px 0 0;">
+        <button id="pdfPrintBtn" style="width:100%; padding:14px; border:none; border-radius:8px; background:#3b82f6; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">📥 Click to Download PDF / Print</button>
       </div>
       <div id="pdfReportContent" style="background:#ffffff; color:#000000; padding:24px; border-radius:0 0 12px 12px; font-family:'SolaimanLipi', Arial, sans-serif;">
         <div id="pdfHeaderBlock">
@@ -898,6 +968,7 @@ function showReportPreview(session, date, records, room) {
 
   document.body.appendChild(overlay);
 
+  // ওভারলের বাইরে (কালো ব্যাকগ্রাউন্ডে) ক্লিক করলে বা Escape চাপলে প্রিভিউ বন্ধ হবে
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
   });
@@ -912,11 +983,8 @@ function showReportPreview(session, date, records, room) {
   document.getElementById("pdfPrintBtn").onclick = () => {
     window.print();
   };
-
-  document.getElementById("pdfBackBtn").onclick = () => {
-    overlay.remove();
-  };
 }
+
 </script>
 </body>
 </html>
