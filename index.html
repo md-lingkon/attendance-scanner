@@ -85,6 +85,18 @@
     color: #fff; font-weight: bold; font-size: 15px; cursor: pointer;
   }
   #appModalOkBtn:hover { background: #2563eb; }
+
+  /* 🖨️ প্রিন্ট/PDF সেভ করার সময় শুধু রিপোর্টের কনটেন্ট (#pdfReportContent)
+     দেখাবে — বাকি পুরো অ্যাপ (স্ক্যানার, ফর্ম, বাটন ইত্যাদি) প্রিন্টে বাদ যাবে */
+  @media print {
+    body * { visibility: hidden; }
+    #pdfReportContent, #pdfReportContent * { visibility: visible; }
+    #pdfReportContent {
+      position: absolute; left: 0; top: 0; width: 100%;
+      padding: 0; border-radius: 0;
+    }
+    #pdfPreviewOverlay { position: static; background: none; }
+  }
 </style>
 </head>
 <body>
@@ -820,8 +832,11 @@ async function generatePDF() {
 
 /**
  * রিপোর্টের প্রিভিউ (ফুল-স্ক্রিন ওভারলে) দেখানো — এখানে সাধারণ HTML হিসেবেই
- * রিপোর্টটি রেন্ডার হয় (তাই বাংলা ফন্ট স্বাভাবিকভাবেই দেখাবে), সাথে উপরে
- * একটি ডাউনলোড ও একটি বন্ধ করার বাটন থাকবে। এখন রুম নম্বরও দেখানো হয়।
+ * রিপোর্টটি রেন্ডার হয় (তাই বাংলা ফন্ট স্বাভাবিকভাবেই দেখাবে)। উপরে শুধু একটি
+ * "📥 Click to Download PDF / Print" বাটন থাকে — ক্লিক করলে সরাসরি window.print()
+ * কল হয়ে ব্রাউজারের প্রিন্ট ডায়ালগ খোলে, যেখান থেকে "Save as PDF" সিলেক্ট করা
+ * যায়। আলাদা কোনো "ডাউনলোড" বা "বন্ধ করুন" বাটন নেই — ওভারলের বাইরে ক্লিক করলে
+ * বা Escape চাপলে প্রিভিউ বন্ধ হয়ে যাবে। এখন রুম নম্বরও দেখানো হয়।
  */
 function showReportPreview(session, date, records, room) {
   const existing = document.getElementById("pdfPreviewOverlay");
@@ -881,10 +896,9 @@ function showReportPreview(session, date, records, room) {
   overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:9999; overflow-y:auto; display:flex; justify-content:center; padding:16px;';
 
   overlay.innerHTML = `
-    <div style="width:100%; max-width:800px; height:fit-content;">
-      <div style="position:sticky; top:0; z-index:2; display:flex; gap:10px; padding:12px; background:#1e293b; border-radius:12px 12px 0 0;">
-        <button id="pdfDownloadBtn" style="flex:1; padding:12px; border:none; border-radius:8px; background:#3b82f6; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">⬇️ PDF ডাউনলোড করুন</button>
-        <button id="pdfCloseBtn" style="padding:12px 18px; border:none; border-radius:8px; background:#475569; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">✖️ বন্ধ করুন</button>
+    <div id="pdfPreviewBox" style="width:100%; max-width:800px; height:fit-content;">
+      <div style="position:sticky; top:0; z-index:2; padding:12px; background:#1e293b; border-radius:12px 12px 0 0;">
+        <button id="pdfPrintBtn" style="width:100%; padding:14px; border:none; border-radius:8px; background:#3b82f6; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">📥 Click to Download PDF / Print</button>
       </div>
       <div id="pdfReportContent" style="background:#ffffff; color:#000000; padding:24px; border-radius:0 0 12px 12px; font-family:'SolaimanLipi', Arial, sans-serif;">
         <div id="pdfHeaderBlock">
@@ -920,86 +934,23 @@ function showReportPreview(session, date, records, room) {
 
   document.body.appendChild(overlay);
 
-  document.getElementById("pdfCloseBtn").onclick = () => overlay.remove();
+  // ওভারলের বাইরে (কালো ব্যাকগ্রাউন্ডে) ক্লিক করলে বা Escape চাপলে প্রিভিউ বন্ধ হবে
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      overlay.remove();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
 
-  document.getElementById("pdfDownloadBtn").onclick = () => {
-    downloadReportAsPDF(document.getElementById("pdfReportContent"), session, date, room);
+  document.getElementById("pdfPrintBtn").onclick = () => {
+    window.print();
   };
 }
 
-/**
- * 📄 প্রিভিউ থেকে "PDF ডাউনলোড করুন" বাটনে ক্লিক করলে রিপোর্টের সম্পূর্ণ HTML
- * (টেবিল, স্টাইলিং, হেডার — সবকিছুসহ) দিয়ে একটা নতুন HTML পেজ বানানো হয়, সেটাকে
- * Blob (type: 'text/html') হিসেবে নতুন ব্রাউজার ট্যাবে খোলা হয়। নতুন ট্যাবে
- * "📥 Click to Download PDF / Print" বাটন থাকে — ক্লিক করলে window.print() কল
- * হয়ে ব্রাউজারের প্রিন্ট ডায়ালগ ওপেন হয়, যেখান থেকে ইউজার "Save as PDF" সিলেক্ট
- * করতে পারে (বা সরাসরি প্রিন্টারে পাঠাতে পারে)।
- *
- * html2canvas/jsPDF-এর বদলে এই পদ্ধতি ব্যবহারের কারণ: বাংলা টেক্সট ব্রাউজারের
- * নিজস্ব রেন্ডারিং ইঞ্জিন দিয়েই আসল ভেক্টর টেক্সট হিসেবে প্রিন্ট হয় (কোনো
- * ছবি-ভিত্তিক রূপান্তর লাগে না), তাই টেক্সট শার্প থাকে, সিলেক্ট/সার্চ করা যায়,
- * এবং ফাইল সাইজও অনেক ছোট হয়।
- */
-function downloadReportAsPDF(reportContentEl, session, date, room) {
-  const safeSession = session.toString().replace(/[^a-zA-Z0-9_-]/g, '_');
-  const safeRoom = (!room || room === "All") ? "AllRooms" : room.toString().replace(/[^a-zA-Z0-9_-]/g, '_');
-  const fileTitle = `Attendance_${safeSession}_${date}_${safeRoom}`;
-
-  const tableHtml = reportContentEl.innerHTML;
-
-  const fullHtml = `<!DOCTYPE html>
-<html lang="bn">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${fileTitle}</title>
-<style>
-  * { box-sizing: border-box; }
-  body {
-    font-family: 'SolaimanLipi', Arial, sans-serif;
-    background: #f1f5f9;
-    margin: 0;
-    padding: 20px;
-  }
-  .toolbar {
-    position: sticky; top: 0; z-index: 10;
-    max-width: 800px; margin: 0 auto 16px;
-    background: #1e293b; padding: 14px; border-radius: 10px;
-    text-align: center;
-  }
-  .toolbar button {
-    padding: 12px 28px; border: none; border-radius: 8px;
-    background: #3b82f6; color: #fff; font-weight: bold;
-    font-size: 15px; cursor: pointer;
-  }
-  .toolbar button:hover { background: #2563eb; }
-  .toolbar p { color: #94a3b8; font-size: 12px; margin: 8px 0 0; }
-  .report-box {
-    background: #ffffff; color: #000000; padding: 24px;
-    border-radius: 10px; max-width: 800px; margin: 0 auto;
-    font-family: 'SolaimanLipi', Arial, sans-serif;
-  }
-  table { width: 100%; border-collapse: collapse; }
-  @media print {
-    .toolbar { display: none; }
-    body { background: #fff; padding: 0; }
-    .report-box { border-radius: 0; padding: 0; max-width: 100%; }
-  }
-</style>
-</head>
-<body>
-  <div class="toolbar">
-    <button onclick="window.print()">📥 Click to Download PDF / Print</button>
-    <p>বাটনে ক্লিক করে প্রিন্ট ডায়ালগ থেকে "Save as PDF" সিলেক্ট করুন</p>
-  </div>
-  <div class="report-box">${tableHtml}</div>
-</body>
-</html>`;
-
-  const blob = new Blob([fullHtml], { type: 'text/html' });
-  const blobUrl = URL.createObjectURL(blob);
-  window.open(blobUrl, '_blank');
-}
 </script>
 </body>
 </html>
