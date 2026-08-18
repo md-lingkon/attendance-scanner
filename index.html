@@ -86,17 +86,51 @@
   }
   #appModalOkBtn:hover { background: #2563eb; }
 
-  /* 🖨️ প্রিন্ট/PDF সেভ করার সময় শুধু রিপোর্টের কনটেন্ট (#pdfReportContent)
-     দেখাবে — বাকি পুরো অ্যাপ (স্ক্যানার, ফর্ম, বাটন ইত্যাদি) প্রিন্টে বাদ যাবে */
-  @media print {
-    body * { visibility: hidden; }
-    #pdfReportContent, #pdfReportContent * { visibility: visible; }
-    #pdfReportContent {
-      position: absolute; left: 0; top: 0; width: 100%;
-      padding: 0; border-radius: 0;
-    }
-    #pdfPreviewOverlay { position: static; background: none; }
+  /* 🖨️ প্রিন্ট/PDF সেভ করার জন্য সংশোধিত CSS (কালো বিট ও ডুপ্লিকেট সমস্যা সমাধান) */
+@media print {
+  /* ১. মূল পেজ, ওভারলে এবং অপ্রয়োজনীয় এলিমেন্ট হাইড করা */
+  body, body * {
+    visibility: hidden !important;
   }
+  
+  /* ২. ব্যাকগ্রাউন্ড কালো ভাব দূর করা */
+  html, body {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* ৩. শুধুমাত্র রিপোর্টের নির্দিষ্ট কন্টেন্ট দৃশ্যমান করা */
+  #pdfReportContent, #pdfReportContent * {
+    visibility: visible !important;
+  }
+
+  /* ৪. প্রিন্ট লেআউটের সঠিক পজিশনিং ও ডুপ্লিকেট সমস্যা রোধ */
+  #pdfReportContent {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 15px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* ৫. ব্যাকগ্রাউন্ড ওভারলে ও প্রিন্ট বাটন প্রিন্ট থেকে সম্পূর্ণ বাদ দেওয়া */
+  #pdfPreviewOverlay {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+  
+  #pdfPrintBtn {
+    display: none !important;
+  }
+}
 </style>
 </head>
 <body>
