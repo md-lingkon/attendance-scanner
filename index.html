@@ -71,9 +71,33 @@
   .log-time { color: #94a3b8; font-size: 11px; margin-left: 8px; }
 
   .badge { font-size: 12px; padding: 2px 8px; border-radius: 20px; background: #334155; color: #cbd5e1; }
+
+  /* 🔔 কাস্টম মোডাল — নেটিভ alert()/confirm() এর বদলে, যাতে ব্রাউজারের URL/সোর্স না দেখায় */
+  #appModalOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 10000;
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  #appModalBox {
+    background: #1e293b; border-radius: 14px; padding: 24px; max-width: 340px; width: 100%;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45); text-align: center; border: 1px solid #334155;
+  }
+  #appModalMsg { color: #e2e8f0; font-size: 15px; line-height: 1.6; margin-bottom: 20px; white-space: pre-wrap; }
+  #appModalOkBtn {
+    width: 100%; padding: 12px; border: none; border-radius: 8px; background: #3b82f6;
+    color: #fff; font-weight: bold; font-size: 15px; cursor: pointer;
+  }
+  #appModalOkBtn:hover { background: #2563eb; }
 </style>
 </head>
 <body>
+
+<!-- 🔔 কাস্টম মোডাল — সব alert() এর বদলে এটা ব্যবহার হবে, ব্রাউজারের নিজস্ব পপআপ (যেখানে সাইটের URL দেখায়) এড়াতে -->
+<div id="appModalOverlay">
+  <div id="appModalBox">
+    <div id="appModalMsg"></div>
+    <button id="appModalOkBtn" onclick="closeAppModal()">ঠিক আছে</button>
+  </div>
+</div>
 
 <!-- 🔒 পাসওয়ার্ড গেট — সঠিক লগইন না দেওয়া পর্যন্ত মূল অ্যাপ হাইড থাকবে -->
 <div id="loginGate" class="wrap" style="padding-top:60px;">
@@ -240,6 +264,7 @@ async function doGateLogin() {
 function doGateLogout() {
   if (html5QrCode) { stopScanner(); }
   sessionStorage.removeItem(AUTH_KEY);
+  resetScanState();
   document.getElementById("mainApp").style.display = "none";
   document.getElementById("loginGate").style.display = "block";
   document.getElementById("gateUser").value = "";
@@ -247,9 +272,35 @@ function doGateLogout() {
 }
 
 function unlockApp() {
+  resetScanState(); // নতুন লগইনে আগের স্ক্যান হিস্ট্রি/কাউন্ট যেন বহন না হয়ে আসে
   document.getElementById("loginGate").style.display = "none";
   document.getElementById("mainApp").style.display = "block";
   initApp();
+}
+
+/**
+ * স্ক্যান-সম্পর্কিত সব ইন-মেমোরি স্টেট (লগ, সফল/ডুপ্লিকেট রোল সেট, কাউন্টার,
+ * ম্যানুয়াল ইনপুট) রিসেট করা। লগআউট বা নতুন লগইনের সময় কল হয়, যাতে আগের
+ * সেশনের হিস্ট্রি নতুন সেশনে দেখা না যায়।
+ */
+function resetScanState() {
+  completedRolls.clear();
+  activeProcessingRolls.clear();
+  scanHistoryData.length = 0;
+  scannedCount = 0;
+  successMarkedCount = 0;
+
+  const badge = document.getElementById("countBadge");
+  if (badge) badge.innerText = "0 জন";
+
+  const log = document.getElementById("log");
+  if (log) log.innerHTML = '<p style="color:#64748b; font-size:13px;">এখনও কোনো স্ক্যান হয়নি।</p>';
+
+  const status = document.getElementById("status");
+  if (status) status.style.display = "none";
+
+  const manualRolls = document.getElementById("manualRolls");
+  if (manualRolls) manualRolls.value = "";
 }
 
 async function initApp() {
@@ -653,6 +704,19 @@ function addLog(roll, text, type) {
   log.prepend(item);
 }
 
+/**
+ * 🔔 কাস্টম মোডাল দেখানো — ব্রাউজারের নেটিভ alert() এর বদলে, যাতে
+ * "script.google.com says" এর মতো সোর্স/URL না দেখায়
+ */
+function showAppModal(message) {
+  document.getElementById("appModalMsg").innerText = message;
+  document.getElementById("appModalOverlay").style.display = "flex";
+}
+
+function closeAppModal() {
+  document.getElementById("appModalOverlay").style.display = "none";
+}
+
 function beep() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -704,13 +768,13 @@ async function generatePDF() {
     const resp = await callApi({ action: "searchAttendance", date: date, roll: "", session: session, room: room });
 
     if (!resp.success) {
-      alert("❌ এরর: " + resp.error);
+      showAppModal("❌ এরর: " + resp.error);
       return;
     }
 
     const records = Array.isArray(resp.data) ? resp.data : [];
     if (records.length === 0) {
-      alert("⚠️ এই সেশন, তারিখ ও রুমে কোনো হাজিরা রেকর্ড পাওয়া যায়নি!");
+      showAppModal("⚠️ এই সেশন, তারিখ ও রুমে কোনো হাজিরা রেকর্ড পাওয়া যায়নি!");
       return;
     }
 
@@ -718,7 +782,7 @@ async function generatePDF() {
 
   } catch (e) {
     console.error(e);
-    alert("❌ সংযোগ ব্যর্থ হয়েছে!");
+    showAppModal("❌ সংযোগ ব্যর্থ হয়েছে!");
   } finally {
     btn.disabled = false;
     btn.innerText = originalText;
@@ -864,7 +928,7 @@ async function downloadReportAsPDF(reportContentEl, session, date, room) {
 
   try {
     if (typeof html2canvas === "undefined" || typeof window.jspdf === "undefined") {
-      alert("❌ PDF লাইব্রেরি লোড হয়নি। ইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন।");
+      showAppModal("❌ PDF লাইব্রেরি লোড হয়নি। ইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন।");
       return;
     }
 
@@ -949,7 +1013,7 @@ async function downloadReportAsPDF(reportContentEl, session, date, room) {
 
   } catch (e) {
     console.error(e);
-    alert("❌ PDF তৈরি করা যায়নি। আবার চেষ্টা করুন।");
+    showAppModal("❌ PDF তৈরি করা যায়নি। আবার চেষ্টা করুন।");
   } finally {
     tempEls.forEach(el => { if (el.parentNode) el.parentNode.removeChild(el); });
     if (btn) {
