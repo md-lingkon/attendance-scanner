@@ -98,8 +98,9 @@
       padding: 0; border-radius: 0;
     }
     #pdfPreviewOverlay { position: static; background: none; }
-    #pdfReportContent table { font-size: 11px; width: auto; margin: 0; }
-    #pdfReportContent th, #pdfReportContent td { padding: 2px 8px !important; white-space: nowrap; }
+    #pdfAttendanceColumns { font-size: 11px; }
+    #pdfAttendanceColumns .attHeaderRow, #pdfAttendanceColumns .attRow { break-inside: avoid; page-break-inside: avoid; }
+    #pdfAttendanceColumns .attCell { padding: 2px 8px !important; white-space: nowrap; }
     #pdfReportContent h2 { margin: 0 0 4px; font-size: 16px; }
     #pdfHeaderBlock p { margin: 2px 0 !important; font-size: 12px; }
   }
@@ -940,43 +941,40 @@ function showReportPreview(session, date, records, room) {
   });
 
   // টেবিলে গ্রুপ ও স্ট্যাটাস কলাম রাখা হচ্ছে না (এগুলো সামারিতে আগে থেকেই আছে)।
-  // পেজের অবশিষ্ট চওড়া জায়গা কাজে লাগাতে তালিকা দুই ভাগ করে পাশাপাশি দুই
-  // কলামে (দুইটা আলাদা <table>) দেখানো হচ্ছে — বাম কলামে প্রথমার্ধ, ডান কলামে
-  // বাকি অর্ধেক, ক্রমিক নম্বর ধারাবাহিকভাবে চলবে।
-  function buildAttendanceTable(recordsSlice, startIndex) {
+  // পুরো তালিকাটা একটাই ধারাবাহিক (continuous) দুই-কলাম CSS লেআউটে (column-count:2)
+  // বসানো হচ্ছে — এতে ব্রাউজার নিজেই প্রথমে বাম কলাম পুরোপুরি ভরে, তারপর একই
+  // পেজের ডান কলামে চলে যায়, আর ডান কলামও শেষ হয়ে গেলে পরবর্তী পেজের বাম
+  // কলাম থেকে বাকি অংশ শুরু হয় — সিরিয়াল নম্বরও পুরো তালিকা জুড়ে ধারাবাহিক
+  // থাকে (আলাদা করে দুই ভাগে ভাগ করার দরকার নেই)।
+  function buildAttendanceColumns(recordsList) {
+    const headerRow = `
+      <div class="attHeaderRow" style="display:flex; border:1px solid #333; background:#f2f2f2; font-weight:bold;">
+        <div class="attCell" style="width:34px; text-align:center; border-right:1px solid #333;">ক্রমিক</div>
+        <div class="attCell" style="width:60px; text-align:center; border-right:1px solid #333;">রোল</div>
+        <div class="attCell" style="flex:1; border-right:1px solid #333; overflow:hidden; text-overflow:ellipsis;">নাম</div>
+        <div class="attCell" style="width:50px; text-align:center;">রুম</div>
+      </div>
+    `;
     let rows = '';
-    recordsSlice.forEach((item, i) => {
+    recordsList.forEach((item, i) => {
       rows += `
-        <tr>
-          <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${startIndex + i + 1}</td>
-          <td style="border:1px solid #333; padding:4px 10px; text-align:center; font-weight:bold; white-space:nowrap;">${item.roll}</td>
-          <td style="border:1px solid #333; padding:4px 10px; white-space:nowrap;">${item.name || ''}</td>
-          <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${item.room || ''}</td>
-        </tr>
+        <div class="attRow" style="display:flex; border:1px solid #333; border-top:none;">
+          <div class="attCell" style="width:34px; text-align:center; border-right:1px solid #333;">${i + 1}</div>
+          <div class="attCell" style="width:60px; text-align:center; font-weight:bold; border-right:1px solid #333;">${item.roll}</div>
+          <div class="attCell" style="flex:1; border-right:1px solid #333; overflow:hidden; text-overflow:ellipsis;">${item.name || ''}</div>
+          <div class="attCell" style="width:50px; text-align:center;">${item.room || ''}</div>
+        </div>
       `;
     });
     return `
-      <table style="width:auto; border-collapse:collapse; font-size:13px; table-layout:auto;">
-        <thead>
-          <tr>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">ক্রমিক</th>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">রোল নম্বর</th>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">নাম</th>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">রুম</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
+      <div id="pdfAttendanceColumns" style="column-count:2; -webkit-column-count:2; column-gap:24px; column-fill:auto; -webkit-column-fill:auto;">
+        ${headerRow}
+        ${rows}
+      </div>
     `;
   }
 
-  const halfIndex = Math.ceil(records.length / 2);
-  const leftTableHtml = buildAttendanceTable(records.slice(0, halfIndex), 0);
-  const rightTableHtml = records.length > halfIndex
-    ? buildAttendanceTable(records.slice(halfIndex), halfIndex)
-    : '';
+  const attendanceColumnsHtml = buildAttendanceColumns(records);
 
   const overlay = document.createElement('div');
   overlay.id = 'pdfPreviewOverlay';
@@ -1001,9 +999,8 @@ function showReportPreview(session, date, records, room) {
             ${roomSummaryHtml}
           </div>
         </div>
-        <div id="pdfTablesWrap" style="display:flex; gap:24px; justify-content:center; align-items:flex-start; margin-top:10px; flex-wrap:wrap;">
-          ${leftTableHtml}
-          ${rightTableHtml}
+        <div id="pdfTablesWrap" style="margin-top:10px;">
+          ${attendanceColumnsHtml}
         </div>
       </div>
     </div>
