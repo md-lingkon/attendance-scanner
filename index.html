@@ -86,9 +86,47 @@
   }
   #appModalOkBtn:hover { background: #2563eb; }
 
+  /* 📋 হাজিরার তালিকা — গ্রুপ/স্ট্যাটাস কলাম নেই (এগুলো উপরের সামারিতেই আছে)।
+     column-count:2 দিয়ে তালিকাটি স্বাভাবিকভাবেই দুই কলামে প্রবাহিত (flow) হয় —
+     রেকর্ড সংখ্যা যতই হোক, প্রতিটি প্রিন্ট পেজেই খালি জায়গা দুই কলামে ভরে যাবে
+     (আগের মতো পুরো তালিকাকে ম্যানুয়ালি অর্ধেক করে বাম/ডান টেবিলে ভাগ করার
+     দরকার নেই, যেটা একাধিক পেজে ছড়ালে অসামঞ্জস্যপূর্ণ দেখাতো)। */
+  #pdfAttendanceList {
+    column-count: 2;
+    column-gap: 20px;
+    width: 100%;
+  }
+  .att-row {
+    display: flex;
+    border: 1px solid #333;
+    border-top: none;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    font-size: 13px;
+  }
+  .att-header-row {
+    background: #f2f2f2;
+    font-weight: bold;
+    border-top: 1px solid #333;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .att-cell {
+    padding: 4px 10px;
+    border-right: 1px solid #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .att-cell:last-child { border-right: none; }
+  .att-cell-sl { width: 42px; text-align: center; flex-shrink: 0; }
+  .att-cell-roll { width: 72px; text-align: center; font-weight: bold; flex-shrink: 0; }
+  .att-cell-name { flex: 1; min-width: 0; }
+  .att-cell-room { width: 64px; text-align: center; flex-shrink: 0; }
+
   /* 🖨️ প্রিন্ট/PDF সেভ করার সময় শুধু রিপোর্টের কনটেন্ট (#pdfReportContent)
      দেখাবে — বাকি পুরো অ্যাপ (স্ক্যানার, ফর্ম, বাটন ইত্যাদি) প্রিন্টে বাদ যাবে।
-     টেবিলের সেল ও পেজ মার্জিনও ছোট রাখা হয়েছে যাতে একই পেজে বেশি রোল ধরে। */
+     তালিকার সেল ও পেজ মার্জিনও ছোট রাখা হয়েছে যাতে একই পেজে বেশি রোল ধরে। */
   @media print {
     @page { margin: 8mm; }
     body * { visibility: hidden; }
@@ -98,8 +136,9 @@
       padding: 0; border-radius: 0;
     }
     #pdfPreviewOverlay { position: static; background: none; }
-    #pdfReportContent table { font-size: 11px; width: auto; margin: 0; }
-    #pdfReportContent th, #pdfReportContent td { padding: 2px 8px !important; white-space: nowrap; }
+    #pdfAttendanceList { column-count: 2; column-gap: 16px; }
+    .att-row { font-size: 11px; }
+    .att-cell { padding: 2px 6px !important; }
     #pdfReportContent h2 { margin: 0 0 4px; font-size: 16px; }
     #pdfHeaderBlock p { margin: 2px 0 !important; font-size: 12px; }
   }
@@ -876,6 +915,38 @@ async function generatePDF() {
 }
 
 /**
+ * হাজিরার তালিকা তৈরি — শুধু ক্রমিক/রোল/নাম/রুম (গ্রুপ ও স্ট্যাটাস কলাম নেই,
+ * কারণ ওগুলো উপরের সামারিতে আগে থেকেই আছে)। একটি মাত্র flex-row ভিত্তিক
+ * তালিকা তৈরি করা হয় এবং সেটাকে column-count:2 দেওয়া কন্টেইনারে বসানো হয়,
+ * যাতে যতগুলোই রেকর্ড থাকুক না কেন প্রিন্টের সময় প্রতিটি পেজেই স্বয়ংক্রিয়ভাবে
+ * দুই কলামে ভাগ হয়ে জায়গাটা পূর্ণভাবে ব্যবহার হয় (আগের মতো তালিকাকে
+ * ম্যানুয়ালি অর্ধেক করে দুইটা আলাদা টেবিলে ভাগ করার দরকার নেই)।
+ */
+function buildAttendanceList(records) {
+  let rows = `
+    <div class="att-row att-header-row">
+      <div class="att-cell att-cell-sl">ক্রমিক</div>
+      <div class="att-cell att-cell-roll">রোল নম্বর</div>
+      <div class="att-cell att-cell-name">নাম</div>
+      <div class="att-cell att-cell-room">রুম</div>
+    </div>
+  `;
+
+  records.forEach((item, i) => {
+    rows += `
+      <div class="att-row">
+        <div class="att-cell att-cell-sl">${i + 1}</div>
+        <div class="att-cell att-cell-roll">${item.roll}</div>
+        <div class="att-cell att-cell-name">${item.name || ''}</div>
+        <div class="att-cell att-cell-room">${item.room || ''}</div>
+      </div>
+    `;
+  });
+
+  return `<div id="pdfAttendanceList">${rows}</div>`;
+}
+
+/**
  * রিপোর্টের প্রিভিউ (ফুল-স্ক্রিন ওভারলে) দেখানো — এখানে সাধারণ HTML হিসেবেই
  * রিপোর্টটি রেন্ডার হয় (তাই বাংলা ফন্ট স্বাভাবিকভাবেই দেখাবে)। উপরে শুধু একটি
  * "📥 Click to Download PDF / Print" বাটন থাকে — ক্লিক করলে সরাসরি window.print()
@@ -939,44 +1010,7 @@ function showReportPreview(session, date, records, room) {
     roomSummaryHtml += `<p style="margin:4px 0;"><strong>Room ${r}:</strong> ${roomCounts[r]} জন${groupDetail}</p>`;
   });
 
-  // টেবিলে গ্রুপ ও স্ট্যাটাস কলাম রাখা হচ্ছে না (এগুলো সামারিতে আগে থেকেই আছে)।
-  // পেজের অবশিষ্ট চওড়া জায়গা কাজে লাগাতে তালিকা দুই ভাগ করে পাশাপাশি দুই
-  // কলামে (দুইটা আলাদা <table>) দেখানো হচ্ছে — বাম কলামে প্রথমার্ধ, ডান কলামে
-  // বাকি অর্ধেক, ক্রমিক নম্বর ধারাবাহিকভাবে চলবে।
-  function buildAttendanceTable(recordsSlice, startIndex) {
-    let rows = '';
-    recordsSlice.forEach((item, i) => {
-      rows += `
-        <tr>
-          <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${startIndex + i + 1}</td>
-          <td style="border:1px solid #333; padding:4px 10px; text-align:center; font-weight:bold; white-space:nowrap;">${item.roll}</td>
-          <td style="border:1px solid #333; padding:4px 10px; white-space:nowrap;">${item.name || ''}</td>
-          <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${item.room || ''}</td>
-        </tr>
-      `;
-    });
-    return `
-      <table style="width:auto; border-collapse:collapse; font-size:13px; table-layout:auto;">
-        <thead>
-          <tr>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">ক্রমিক</th>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">রোল নম্বর</th>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">নাম</th>
-            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">রুম</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-    `;
-  }
-
-  const halfIndex = Math.ceil(records.length / 2);
-  const leftTableHtml = buildAttendanceTable(records.slice(0, halfIndex), 0);
-  const rightTableHtml = records.length > halfIndex
-    ? buildAttendanceTable(records.slice(halfIndex), halfIndex)
-    : '';
+  const attendanceListHtml = buildAttendanceList(records);
 
   const overlay = document.createElement('div');
   overlay.id = 'pdfPreviewOverlay';
@@ -1001,9 +1035,8 @@ function showReportPreview(session, date, records, room) {
             ${roomSummaryHtml}
           </div>
         </div>
-        <div id="pdfTablesWrap" style="display:flex; gap:24px; justify-content:center; align-items:flex-start; margin-top:10px; flex-wrap:wrap;">
-          ${leftTableHtml}
-          ${rightTableHtml}
+        <div id="pdfTablesWrap" style="margin-top:10px;">
+          ${attendanceListHtml}
         </div>
       </div>
     </div>
