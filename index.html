@@ -206,17 +206,56 @@ const activeProcessingRolls = new Set();
 const completedRolls = new Set();
 const scanHistoryData = [];
 
-async function callApi(payload) {
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  return res.json();
+/**
+ * সার্ভারে (Google Apps Script) রিকোয়েস্ট পাঠানোর কেন্দ্রীয় ফাংশন।
+ * "বারবার সংযোগ ব্যর্থ" সমস্যার প্রধান কারণ সাধারণত Apps Script-এর ধীর
+ * কোল্ড-স্টার্ট বা সাময়িক নেটওয়ার্ক হিকআপ — যেটা মিলিসেকেন্ডের মধ্যেই ঠিক
+ * হয়ে যায়। আগে একবার fetch ব্যর্থ হলেই সরাসরি এরর দেখানো হতো। এখন:
+ *  ১. ১৫ সেকেন্ড টাইমআউট রাখা হয়েছে (AbortController দিয়ে) — যাতে অনুরোধ
+ *     অনির্দিষ্টকাল আটকে না থেকে যুক্তিসঙ্গত সময়ে ব্যর্থ/সফল হয়।
+ *  ২. প্রথমবার ব্যর্থ হলে সাথে সাথে হাল ছেড়ে না দিয়ে সংক্ষিপ্ত বিরতি দিয়ে
+ *     সর্বোচ্চ ২ বার আবার চেষ্টা করা হয় (মোট ৩ বার পর্যন্ত), যা বেশিরভাগ
+ *     সাময়িক সমস্যা নিজে থেকেই সামলে নেয়।
+ */
+async function callApi(payload, maxRetries = 2) {
+  const timeoutMs = 15000;
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return await res.json();
+    } catch (e) {
+      clearTimeout(timer);
+      lastError = (e && e.name === "AbortError") ? new Error("Request timed out") : e;
+      console.warn(`callApi attempt ${attempt + 1}/${maxRetries + 1} failed:`, lastError);
+      if (attempt === maxRetries) break;
+      await new Promise(r => setTimeout(r, 700 * (attempt + 1))); // পরের চেষ্টার আগে বাড়তি অপেক্ষা
+    }
+  }
+  throw lastError;
 }
 
 const AUTH_KEY = "qr_scanner_auth"; // sessionStorage কী — শুধু এই ট্যাব খোলা থাকা পর্যন্ত মনে থাকবে
+
+/**
+ * এরর মেসেজের সাথে সংক্ষিপ্ত কারণ জুড়ে দেওয়া — যাতে "সংযোগ ব্যর্থ" বারবার
+ * এলে বোঝা যায় এটা ইন্টারনেট না থাকার কারণে, নাকি সার্ভার দেরি করার কারণে।
+ */
+function describeConnError(e) {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return " (ইন্টারনেট সংযোগ নেই)";
+  if (e && e.message === "Request timed out") return " (সার্ভার সাড়া দিতে দেরি করছে, আবার চেষ্টা করুন)";
+  return "";
+}
 
 window.addEventListener('DOMContentLoaded', () => {
   // আগে থেকে এই ট্যাবে লগইন করা থাকলে সরাসরি মূল অ্যাপ দেখানো, নাহলে লগইন গেট
@@ -270,7 +309,7 @@ async function doGateLogin() {
     msgEl.style.display = "block";
     msgEl.style.background = "rgba(239,68,68,0.15)";
     msgEl.style.color = "#ef4444";
-    msgEl.innerText = "❌ সংযোগ ব্যর্থ হয়েছে!";
+    msgEl.innerText = "❌ সংযোগ ব্যর্থ হয়েছে!" + describeConnError(e);
   } finally {
     btn.disabled = false;
     btn.innerText = "লগইন করুন";
@@ -562,8 +601,8 @@ async function processAttendanceAsync(roll, session, date, room) {
       beepError();
     }
   } catch (e) {
-    addLog(roll, "❌ সংযোগ ব্যর্থ", "err");
-    showStatus("❌ সংযোগ ব্যর্থ হয়েছে", "err");
+    addLog(roll, "❌ সংযোগ ব্যর্থ" + describeConnError(e), "err");
+    showStatus("❌ সংযোগ ব্যর্থ হয়েছে" + describeConnError(e), "err");
     beepError();
   } finally {
     // প্রসেসিং শেষ হলে থ্রোটল সেট থেকে সরিয়ে দেওয়া
@@ -716,8 +755,8 @@ async function submitManualRolls() {
       beepError();
     }
   } catch (e) {
-    addLog("-", "❌ সংযোগ ব্যর্থ", "err");
-    showStatus("❌ সংযোগ ব্যর্থ হয়েছে", "err");
+    addLog("-", "❌ সংযোগ ব্যর্থ" + describeConnError(e), "err");
+    showStatus("❌ সংযোগ ব্যর্থ হয়েছে" + describeConnError(e), "err");
     beepError();
   } finally {
     btn.disabled = false;
@@ -829,7 +868,7 @@ async function generatePDF() {
 
   } catch (e) {
     console.error(e);
-    showAppModal("❌ সংযোগ ব্যর্থ হয়েছে!");
+    showAppModal("❌ সংযোগ ব্যর্থ হয়েছে!" + describeConnError(e));
   } finally {
     btn.disabled = false;
     btn.innerText = originalText;
