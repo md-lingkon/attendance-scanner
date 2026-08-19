@@ -86,51 +86,17 @@
   }
   #appModalOkBtn:hover { background: #2563eb; }
 
-  /* 🖨️ প্রিন্ট/PDF সেভ করার জন্য সংশোধিত CSS (কালো বিট ও ডুপ্লিকেট সমস্যা সমাধান) */
-@media print {
-  /* ১. মূল পেজ, ওভারলে এবং অপ্রয়োজনীয় এলিমেন্ট হাইড করা */
-  body, body * {
-    visibility: hidden !important;
+  /* 🖨️ প্রিন্ট/PDF সেভ করার সময় শুধু রিপোর্টের কনটেন্ট (#pdfReportContent)
+     দেখাবে — বাকি পুরো অ্যাপ (স্ক্যানার, ফর্ম, বাটন ইত্যাদি) প্রিন্টে বাদ যাবে */
+  @media print {
+    body * { visibility: hidden; }
+    #pdfReportContent, #pdfReportContent * { visibility: visible; }
+    #pdfReportContent {
+      position: absolute; left: 0; top: 0; width: 100%;
+      padding: 0; border-radius: 0;
+    }
+    #pdfPreviewOverlay { position: static; background: none; }
   }
-  
-  /* ২. ব্যাকগ্রাউন্ড কালো ভাব দূর করা */
-  html, body {
-    background: #ffffff !important;
-    background-color: #ffffff !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  /* ৩. শুধুমাত্র রিপোর্টের নির্দিষ্ট কন্টেন্ট দৃশ্যমান করা */
-  #pdfReportContent, #pdfReportContent * {
-    visibility: visible !important;
-  }
-
-  /* ৪. প্রিন্ট লেআউটের সঠিক পজিশনিং ও ডুপ্লিকেট সমস্যা রোধ */
-  #pdfReportContent {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 15px !important;
-    background: #ffffff !important;
-    color: #000000 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-  }
-
-  /* ৫. ব্যাকগ্রাউন্ড ওভারলে ও প্রিন্ট বাটন প্রিন্ট থেকে সম্পূর্ণ বাদ দেওয়া */
-  #pdfPreviewOverlay {
-    position: static !important;
-    background: transparent !important;
-    padding: 0 !important;
-  }
-  
-  #pdfPrintBtn {
-    display: none !important;
-  }
-}
 </style>
 </head>
 <body>
@@ -931,7 +897,7 @@ function showReportPreview(session, date, records, room) {
 
   overlay.innerHTML = `
     <div id="pdfPreviewBox" style="width:100%; max-width:800px; height:fit-content;">
-      <div style="position:sticky; top:0; z-index:2; padding:12px; background:#1e293b; border-radius:12px 12px 0 0;">
+      <div id="pdfToolbarBar" style="position:sticky; top:0; z-index:2; padding:12px; background:#1e293b; border-radius:12px 12px 0 0;">
         <button id="pdfPrintBtn" style="width:100%; padding:14px; border:none; border-radius:8px; background:#3b82f6; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">📥 Click to Download PDF / Print</button>
       </div>
       <div id="pdfReportContent" style="background:#ffffff; color:#000000; padding:24px; border-radius:0 0 12px 12px; font-family:'SolaimanLipi', Arial, sans-serif;">
@@ -981,6 +947,23 @@ function showReportPreview(session, date, records, room) {
   document.addEventListener('keydown', escHandler);
 
   document.getElementById("pdfPrintBtn").onclick = () => {
+    // 🖨️ ওভারলে তৈরি করার সময় ইনলাইন style দিয়ে position:fixed ও কালো
+    // ব্যাকগ্রাউন্ড বসানো হয়েছিল — সেই ইনলাইন style, স্টাইলশিটের @media print
+    // রুলের চেয়ে স্পেসিফিসিটিতে এগিয়ে থাকে বলে সেটাই থেকে যাচ্ছিল। ফলে Chrome
+    // ফিক্সড-পজিশনড এলিমেন্টকে প্রতি পেজে বারবার প্রিন্ট করছিল — এই কারণেই
+    // তালিকা দুইবার আসা এবং ডানপাশে কালো অংশ দেখা যাচ্ছিল। এখানে সেই একই
+    // ইনলাইন style-টাই সরাসরি জাভাস্ক্রিপ্ট দিয়ে সাময়িকভাবে বদলে দেওয়া হচ্ছে
+    // (যেটা ঠিক ততটাই স্পেসিফিক, তাই নিশ্চিতভাবে কাজ করবে), প্রিন্ট শেষে আগের
+    // অবস্থায় ফিরিয়ে আনা হচ্ছে।
+    const originalOverlayCss = overlay.style.cssText;
+    overlay.style.cssText = 'position:static; background:transparent; z-index:9999; padding:0; display:block;';
+
+    const restoreOverlay = () => {
+      overlay.style.cssText = originalOverlayCss;
+      window.removeEventListener('afterprint', restoreOverlay);
+    };
+    window.addEventListener('afterprint', restoreOverlay);
+
     window.print();
   };
 }
