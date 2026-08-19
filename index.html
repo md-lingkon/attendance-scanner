@@ -90,7 +90,11 @@
      দেখাবে — বাকি পুরো অ্যাপ (স্ক্যানার, ফর্ম, বাটন ইত্যাদি) প্রিন্টে বাদ যাবে।
      টেবিলের সেল ও পেজ মার্জিনও ছোট রাখা হয়েছে যাতে একই পেজে বেশি রোল ধরে। */
   @media print {
-    @page { margin: 8mm; }
+    /* ডিফল্ট মার্জিন — ২য় পেজ থেকে উপরে একটু বাড়তি জায়গা (মার্জিন) রাখা হচ্ছে,
+       যাতে পেজের একদম কিনারা ঘেঁষে টেবিল শুরু না হয়ে যায়। প্রথম পেজে যেহেতু
+       আগে থেকেই হেডার ব্লক (শিরোনাম, সেশন তথ্য) থাকে, তাই সেটার মার্জিন কম রাখা হলো। */
+    @page { margin: 8mm; margin-top: 16mm; }
+    @page :first { margin-top: 8mm; }
     body * { visibility: hidden; }
     #pdfReportContent, #pdfReportContent * { visibility: visible; }
     #pdfReportContent {
@@ -98,9 +102,14 @@
       padding: 0; border-radius: 0;
     }
     #pdfPreviewOverlay { position: static; background: none; }
-    #pdfAttendanceColumns { font-size: 11px; }
-    #pdfAttendanceColumns .attHeaderRow, #pdfAttendanceColumns .attRow { break-inside: avoid; page-break-inside: avoid; }
-    #pdfAttendanceColumns .attCell { padding: 2px 8px !important; white-space: nowrap; }
+    #pdfAttendanceColumns { font-size: 11px; border-collapse: collapse; width: 100%; }
+    /* আসল <table>/<thead> ব্যবহার করা হয়েছে বলেই ব্রাউজার এটাকে টেবিল হিসেবে
+       ট্রিট করে — ফলে টেবিল যখন বাম কলাম থেকে ডান কলামে যায়, বা এক পেজ থেকে
+       পরের পেজে যায়, তখন thead (header row) নিজে থেকেই প্রতিবার আবার বসে যায়।
+       div দিয়ে এই রিপিট-হেডার ফিচারটা কাজ করে না, তাই <table> এ কনভার্ট করা হলো। */
+    #pdfAttendanceColumns thead { display: table-header-group; }
+    #pdfAttendanceColumns tr { break-inside: avoid; page-break-inside: avoid; }
+    #pdfAttendanceColumns th, #pdfAttendanceColumns td { padding: 2px 8px !important; white-space: nowrap; border: 1px solid #333; }
     #pdfReportContent h2 { margin: 0 0 4px; font-size: 16px; }
     #pdfHeaderBlock p { margin: 2px 0 !important; font-size: 12px; }
   }
@@ -947,29 +956,39 @@ function showReportPreview(session, date, records, room) {
   // কলাম থেকে বাকি অংশ শুরু হয় — সিরিয়াল নম্বরও পুরো তালিকা জুড়ে ধারাবাহিক
   // থাকে (আলাদা করে দুই ভাগে ভাগ করার দরকার নেই)।
   function buildAttendanceColumns(recordsList) {
+    // আগে div দিয়ে flex-row বানানো হতো, যেটা "column-count:2" এর সাথে দেখতে
+    // টেবিলের মতো লাগলেও আসলে ব্রাউজারের কাছে টেবিল ছিল না — তাই বাম কলাম থেকে
+    // ডান কলামে বা এক পেজ থেকে পরের পেজে গেলে হেডার রো (ক্রমিক/রোল/নাম/রুম)
+    // আবার বসতো না। এখন আসল <table> + <thead> ব্যবহার করা হচ্ছে, কারণ থেড
+    // (thead) হলো একমাত্র জিনিস যেটা ব্রাউজার নিজে থেকেই প্রতিটা কলাম-ব্রেক ও
+    // পেজ-ব্রেকে পুনরায় বসিয়ে দেয় (table-header-group ফ্র্যাগমেন্টেশন ফিচার)।
     const headerRow = `
-      <div class="attHeaderRow" style="display:flex; border:1px solid #333; background:#f2f2f2; font-weight:bold;">
-        <div class="attCell" style="width:34px; text-align:center; border-right:1px solid #333;">ক্রমিক</div>
-        <div class="attCell" style="width:60px; text-align:center; border-right:1px solid #333;">রোল</div>
-        <div class="attCell" style="flex:1; border-right:1px solid #333; overflow:hidden; text-overflow:ellipsis;">নাম</div>
-        <div class="attCell" style="width:50px; text-align:center;">রুম</div>
-      </div>
+      <thead>
+        <tr class="attHeaderRow" style="background:#f2f2f2; font-weight:bold;">
+          <th class="attCell" style="width:34px; text-align:center; border:1px solid #333;">ক্রমিক</th>
+          <th class="attCell" style="width:60px; text-align:center; border:1px solid #333;">রোল</th>
+          <th class="attCell" style="text-align:left; overflow:hidden; text-overflow:ellipsis; border:1px solid #333;">নাম</th>
+          <th class="attCell" style="width:50px; text-align:center; border:1px solid #333;">রুম</th>
+        </tr>
+      </thead>
     `;
     let rows = '';
     recordsList.forEach((item, i) => {
       rows += `
-        <div class="attRow" style="display:flex; border:1px solid #333; border-top:none;">
-          <div class="attCell" style="width:34px; text-align:center; border-right:1px solid #333;">${i + 1}</div>
-          <div class="attCell" style="width:60px; text-align:center; font-weight:bold; border-right:1px solid #333;">${item.roll}</div>
-          <div class="attCell" style="flex:1; border-right:1px solid #333; overflow:hidden; text-overflow:ellipsis;">${item.name || ''}</div>
-          <div class="attCell" style="width:50px; text-align:center;">${item.room || ''}</div>
-        </div>
+        <tr class="attRow">
+          <td class="attCell" style="text-align:center; border:1px solid #333;">${i + 1}</td>
+          <td class="attCell" style="text-align:center; font-weight:bold; border:1px solid #333;">${item.roll}</td>
+          <td class="attCell" style="overflow:hidden; text-overflow:ellipsis; border:1px solid #333;">${item.name || ''}</td>
+          <td class="attCell" style="text-align:center; border:1px solid #333;">${item.room || ''}</td>
+        </tr>
       `;
     });
     return `
-      <div id="pdfAttendanceColumns" style="column-count:2; -webkit-column-count:2; column-gap:24px; column-fill:auto; -webkit-column-fill:auto;">
-        ${headerRow}
-        ${rows}
+      <div style="column-count:2; -webkit-column-count:2; column-gap:24px; column-fill:auto; -webkit-column-fill:auto;">
+        <table id="pdfAttendanceColumns" style="border-collapse:collapse; width:100%;">
+          ${headerRow}
+          <tbody>${rows}</tbody>
+        </table>
       </div>
     `;
   }
