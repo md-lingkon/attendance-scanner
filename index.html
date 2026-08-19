@@ -87,8 +87,10 @@
   #appModalOkBtn:hover { background: #2563eb; }
 
   /* 🖨️ প্রিন্ট/PDF সেভ করার সময় শুধু রিপোর্টের কনটেন্ট (#pdfReportContent)
-     দেখাবে — বাকি পুরো অ্যাপ (স্ক্যানার, ফর্ম, বাটন ইত্যাদি) প্রিন্টে বাদ যাবে */
+     দেখাবে — বাকি পুরো অ্যাপ (স্ক্যানার, ফর্ম, বাটন ইত্যাদি) প্রিন্টে বাদ যাবে।
+     টেবিলের সেল ও পেজ মার্জিনও ছোট রাখা হয়েছে যাতে একই পেজে বেশি রোল ধরে। */
   @media print {
+    @page { margin: 8mm; }
     body * { visibility: hidden; }
     #pdfReportContent, #pdfReportContent * { visibility: visible; }
     #pdfReportContent {
@@ -96,6 +98,10 @@
       padding: 0; border-radius: 0;
     }
     #pdfPreviewOverlay { position: static; background: none; }
+    #pdfReportContent table { font-size: 11px; }
+    #pdfReportContent th, #pdfReportContent td { padding: 2px 4px !important; }
+    #pdfReportContent h2 { margin: 0 0 4px; font-size: 16px; }
+    #pdfHeaderBlock p { margin: 2px 0 !important; font-size: 12px; }
   }
 </style>
 </head>
@@ -864,29 +870,46 @@ function showReportPreview(session, date, records, room) {
     groupSummaryHtml += `<p style="margin:4px 0;"><strong>${g}:</strong> ${groupCounts[g]} জন</p>`;
   });
 
-  // রুম অনুযায়ী উপস্থিতি গণনা (কোন রুমে কতজন) — All Room বাছাই করলে
-  // প্রতিটি রুমের আলাদা সংখ্যা দেখাবে, নির্দিষ্ট রুম বাছাই করলে শুধু ঐ রুমেরটাই আসবে
+  // রুম অনুযায়ী উপস্থিতি গণনা (কোন রুমে কতজন, এবং সেই রুমে কোন গ্রুপের কতজন)
+  // All Room বাছাই করলে প্রতিটি রুমের আলাদা সংখ্যা দেখাবে, নির্দিষ্ট রুম
+  // বাছাই করলে শুধু ঐ রুমেরটাই আসবে
   const roomCounts = {};
+  const roomGroupCounts = {}; // { room: { group: count } }
   records.forEach(item => {
     const r = (item.room || '').toString().trim() || 'অনির্ধারিত';
+    const g = (item.group || '').toString().trim() || 'অনির্ধারিত';
     roomCounts[r] = (roomCounts[r] || 0) + 1;
+    if (!roomGroupCounts[r]) roomGroupCounts[r] = {};
+    roomGroupCounts[r][g] = (roomGroupCounts[r][g] || 0) + 1;
   });
 
   let roomSummaryHtml = '';
   Object.keys(roomCounts).sort().forEach(r => {
-    roomSummaryHtml += `<p style="margin:4px 0;"><strong>Room ${r}:</strong> ${roomCounts[r]} জন</p>`;
+    const groupsForRoom = roomGroupCounts[r] || {};
+    const groupParts = [];
+    preferredOrder.forEach(g => {
+      if (groupsForRoom[g] !== undefined) {
+        groupParts.push(`${g}-${groupsForRoom[g]}`);
+        delete groupsForRoom[g];
+      }
+    });
+    Object.keys(groupsForRoom).forEach(g => {
+      groupParts.push(`${g}-${groupsForRoom[g]}`);
+    });
+    const groupDetail = groupParts.length ? ` (${groupParts.join(', ')})` : '';
+    roomSummaryHtml += `<p style="margin:4px 0;"><strong>Room ${r}:</strong> ${roomCounts[r]} জন${groupDetail}</p>`;
   });
 
   let tableRows = '';
   records.forEach((item, index) => {
     tableRows += `
       <tr>
-        <td style="border:1px solid #333; padding:8px; text-align:center;">${index + 1}</td>
-        <td style="border:1px solid #333; padding:8px; text-align:center; font-weight:bold;">${item.roll}</td>
-        <td style="border:1px solid #333; padding:8px;">${item.name || ''}</td>
-        <td style="border:1px solid #333; padding:8px; text-align:center;">${item.group || ''}</td>
-        <td style="border:1px solid #333; padding:8px; text-align:center;">${item.room || ''}</td>
-        <td style="border:1px solid #333; padding:8px; text-align:center; color:#059669; font-weight:bold;">উপস্থিত</td>
+        <td style="border:1px solid #333; padding:4px 6px; text-align:center;">${index + 1}</td>
+        <td style="border:1px solid #333; padding:4px 6px; text-align:center; font-weight:bold;">${item.roll}</td>
+        <td style="border:1px solid #333; padding:4px 6px;">${item.name || ''}</td>
+        <td style="border:1px solid #333; padding:4px 6px; text-align:center;">${item.group || ''}</td>
+        <td style="border:1px solid #333; padding:4px 6px; text-align:center;">${item.room || ''}</td>
+        <td style="border:1px solid #333; padding:4px 6px; text-align:center; color:#059669; font-weight:bold;">উপস্থিত</td>
       </tr>
     `;
   });
@@ -897,8 +920,9 @@ function showReportPreview(session, date, records, room) {
 
   overlay.innerHTML = `
     <div id="pdfPreviewBox" style="width:100%; max-width:800px; height:fit-content;">
-      <div id="pdfToolbarBar" style="position:sticky; top:0; z-index:2; padding:12px; background:#1e293b; border-radius:12px 12px 0 0;">
-        <button id="pdfPrintBtn" style="width:100%; padding:14px; border:none; border-radius:8px; background:#3b82f6; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">📥 Click to Download PDF / Print</button>
+      <div id="pdfToolbarBar" style="position:sticky; top:0; z-index:2; padding:12px; background:#1e293b; border-radius:12px 12px 0 0; display:flex; gap:10px;">
+        <button id="pdfBackBtn" style="padding:14px 18px; border:none; border-radius:8px; background:#475569; color:#fff; font-weight:bold; font-size:15px; cursor:pointer; white-space:nowrap;">⬅️ ফিরে যান</button>
+        <button id="pdfPrintBtn" style="flex:1; padding:14px; border:none; border-radius:8px; background:#3b82f6; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">📥 Click to Download PDF / Print</button>
       </div>
       <div id="pdfReportContent" style="background:#ffffff; color:#000000; padding:24px; border-radius:0 0 12px 12px; font-family:'SolaimanLipi', Arial, sans-serif;">
         <div id="pdfHeaderBlock">
@@ -913,15 +937,15 @@ function showReportPreview(session, date, records, room) {
             ${roomSummaryHtml}
           </div>
         </div>
-        <table style="width:100%; border-collapse:collapse; margin-top:10px;">
+        <table style="width:100%; border-collapse:collapse; margin-top:10px; font-size:13px;">
           <thead>
             <tr>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">ক্রমিক</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">রোল নম্বর</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">নাম</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">গ্রুপ</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">রুম</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:8px; font-weight:bold;">স্ট্যাটাস</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">ক্রমিক</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">রোল নম্বর</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">নাম</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">গ্রুপ</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">রুম</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">স্ট্যাটাস</th>
             </tr>
           </thead>
           <tbody>
@@ -945,6 +969,8 @@ function showReportPreview(session, date, records, room) {
     }
   };
   document.addEventListener('keydown', escHandler);
+
+  document.getElementById("pdfBackBtn").onclick = () => overlay.remove();
 
   document.getElementById("pdfPrintBtn").onclick = () => {
     // 🖨️ ওভারলে তৈরি করার সময় ইনলাইন style দিয়ে position:fixed ও কালো
