@@ -98,7 +98,7 @@
       padding: 0; border-radius: 0;
     }
     #pdfPreviewOverlay { position: static; background: none; }
-    #pdfReportContent table { font-size: 11px; width: auto; margin: 8px auto 0; }
+    #pdfReportContent table { font-size: 11px; width: auto; margin: 0; }
     #pdfReportContent th, #pdfReportContent td { padding: 2px 8px !important; white-space: nowrap; }
     #pdfReportContent h2 { margin: 0 0 4px; font-size: 16px; }
     #pdfHeaderBlock p { margin: 2px 0 !important; font-size: 12px; }
@@ -900,26 +900,51 @@ function showReportPreview(session, date, records, room) {
     roomSummaryHtml += `<p style="margin:4px 0;"><strong>Room ${r}:</strong> ${roomCounts[r]} জন${groupDetail}</p>`;
   });
 
-  let tableRows = '';
-  records.forEach((item, index) => {
-    tableRows += `
-      <tr>
-        <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${index + 1}</td>
-        <td style="border:1px solid #333; padding:4px 10px; text-align:center; font-weight:bold; white-space:nowrap;">${item.roll}</td>
-        <td style="border:1px solid #333; padding:4px 10px; white-space:nowrap;">${item.name || ''}</td>
-        <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${item.group || ''}</td>
-        <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${item.room || ''}</td>
-        <td style="border:1px solid #333; padding:4px 10px; text-align:center; color:#059669; font-weight:bold; white-space:nowrap;">উপস্থিত</td>
-      </tr>
+  // টেবিলে গ্রুপ ও স্ট্যাটাস কলাম রাখা হচ্ছে না (এগুলো সামারিতে আগে থেকেই আছে)।
+  // পেজের অবশিষ্ট চওড়া জায়গা কাজে লাগাতে তালিকা দুই ভাগ করে পাশাপাশি দুই
+  // কলামে (দুইটা আলাদা <table>) দেখানো হচ্ছে — বাম কলামে প্রথমার্ধ, ডান কলামে
+  // বাকি অর্ধেক, ক্রমিক নম্বর ধারাবাহিকভাবে চলবে।
+  function buildAttendanceTable(recordsSlice, startIndex) {
+    let rows = '';
+    recordsSlice.forEach((item, i) => {
+      rows += `
+        <tr>
+          <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${startIndex + i + 1}</td>
+          <td style="border:1px solid #333; padding:4px 10px; text-align:center; font-weight:bold; white-space:nowrap;">${item.roll}</td>
+          <td style="border:1px solid #333; padding:4px 10px; white-space:nowrap;">${item.name || ''}</td>
+          <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${item.room || ''}</td>
+        </tr>
+      `;
+    });
+    return `
+      <table style="width:auto; border-collapse:collapse; font-size:13px; table-layout:auto;">
+        <thead>
+          <tr>
+            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">ক্রমিক</th>
+            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">রোল নম্বর</th>
+            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">নাম</th>
+            <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">রুম</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
     `;
-  });
+  }
+
+  const halfIndex = Math.ceil(records.length / 2);
+  const leftTableHtml = buildAttendanceTable(records.slice(0, halfIndex), 0);
+  const rightTableHtml = records.length > halfIndex
+    ? buildAttendanceTable(records.slice(halfIndex), halfIndex)
+    : '';
 
   const overlay = document.createElement('div');
   overlay.id = 'pdfPreviewOverlay';
   overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:9999; overflow-y:auto; display:flex; justify-content:center; padding:16px;';
 
   overlay.innerHTML = `
-    <div id="pdfPreviewBox" style="width:100%; max-width:800px; height:fit-content;">
+    <div id="pdfPreviewBox" style="width:100%; max-width:960px; height:fit-content;">
       <div id="pdfToolbarBar" style="position:sticky; top:0; z-index:2; padding:12px; background:#1e293b; border-radius:12px 12px 0 0; display:flex; gap:10px;">
         <button id="pdfBackBtn" style="padding:14px 18px; border:none; border-radius:8px; background:#475569; color:#fff; font-weight:bold; font-size:15px; cursor:pointer; white-space:nowrap;">⬅️ ফিরে যান</button>
         <button id="pdfPrintBtn" style="flex:1; padding:14px; border:none; border-radius:8px; background:#3b82f6; color:#fff; font-weight:bold; font-size:15px; cursor:pointer;">📥 Click to Download PDF / Print</button>
@@ -937,21 +962,10 @@ function showReportPreview(session, date, records, room) {
             ${roomSummaryHtml}
           </div>
         </div>
-        <table style="width:auto; margin:10px auto 0; border-collapse:collapse; font-size:13px; table-layout:auto;">
-          <thead>
-            <tr>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">ক্রমিক</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">রোল নম্বর</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">নাম</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">গ্রুপ</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">রুম</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">স্ট্যাটাস</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows}
-          </tbody>
-        </table>
+        <div id="pdfTablesWrap" style="display:flex; gap:24px; justify-content:center; align-items:flex-start; margin-top:10px; flex-wrap:wrap;">
+          ${leftTableHtml}
+          ${rightTableHtml}
+        </div>
       </div>
     </div>
   `;
