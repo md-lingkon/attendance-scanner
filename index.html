@@ -98,8 +98,8 @@
       padding: 0; border-radius: 0;
     }
     #pdfPreviewOverlay { position: static; background: none; }
-    #pdfReportContent table { font-size: 11px; }
-    #pdfReportContent th, #pdfReportContent td { padding: 2px 4px !important; }
+    #pdfReportContent table { font-size: 11px; width: auto; margin: 8px auto 0; }
+    #pdfReportContent th, #pdfReportContent td { padding: 2px 8px !important; white-space: nowrap; }
     #pdfReportContent h2 { margin: 0 0 4px; font-size: 16px; }
     #pdfHeaderBlock p { margin: 2px 0 !important; font-size: 12px; }
   }
@@ -904,12 +904,12 @@ function showReportPreview(session, date, records, room) {
   records.forEach((item, index) => {
     tableRows += `
       <tr>
-        <td style="border:1px solid #333; padding:4px 6px; text-align:center;">${index + 1}</td>
-        <td style="border:1px solid #333; padding:4px 6px; text-align:center; font-weight:bold;">${item.roll}</td>
-        <td style="border:1px solid #333; padding:4px 6px;">${item.name || ''}</td>
-        <td style="border:1px solid #333; padding:4px 6px; text-align:center;">${item.group || ''}</td>
-        <td style="border:1px solid #333; padding:4px 6px; text-align:center;">${item.room || ''}</td>
-        <td style="border:1px solid #333; padding:4px 6px; text-align:center; color:#059669; font-weight:bold;">উপস্থিত</td>
+        <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${index + 1}</td>
+        <td style="border:1px solid #333; padding:4px 10px; text-align:center; font-weight:bold; white-space:nowrap;">${item.roll}</td>
+        <td style="border:1px solid #333; padding:4px 10px; white-space:nowrap;">${item.name || ''}</td>
+        <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${item.group || ''}</td>
+        <td style="border:1px solid #333; padding:4px 10px; text-align:center; white-space:nowrap;">${item.room || ''}</td>
+        <td style="border:1px solid #333; padding:4px 10px; text-align:center; color:#059669; font-weight:bold; white-space:nowrap;">উপস্থিত</td>
       </tr>
     `;
   });
@@ -937,15 +937,15 @@ function showReportPreview(session, date, records, room) {
             ${roomSummaryHtml}
           </div>
         </div>
-        <table style="width:100%; border-collapse:collapse; margin-top:10px; font-size:13px;">
+        <table style="width:auto; margin:10px auto 0; border-collapse:collapse; font-size:13px; table-layout:auto;">
           <thead>
             <tr>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">ক্রমিক</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">রোল নম্বর</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">নাম</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">গ্রুপ</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">রুম</th>
-              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 6px; font-weight:bold;">স্ট্যাটাস</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">ক্রমিক</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">রোল নম্বর</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">নাম</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">গ্রুপ</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">রুম</th>
+              <th style="background:#f2f2f2; border:1px solid #333; padding:4px 10px; font-weight:bold; white-space:nowrap;">স্ট্যাটাস</th>
             </tr>
           </thead>
           <tbody>
