@@ -158,10 +158,11 @@
     <label>তারিখ</label>
     <input type="date" id="attDate">
 
-    <label>Room No (শুধুমাত্র ইংরেজিতে লিখুন)</label>
-    <input type="text" id="roomInput" placeholder="যেমনঃ 101, A-Block" autocomplete="off" oninput="sanitizeRoomInput(this)" style="text-transform:uppercase;">
-    <div class="hint" id="roomWarnHint" style="display:none; color:#f87171;">⚠️ Room No শুধুমাত্র ইংরেজি অক্ষর (A-Z), সংখ্যা (0-9) ও হাইফেন (-) ব্যবহার করা যাবে!</div>
-    <div class="hint">হাজিরা নেবার আগে Room No অবশ্যই পূরণ করতে হবে।</div>
+    <label>Room No</label>
+    <select id="roomInput">
+      <option value="">-- রুম সিলেক্ট করুন --</option>
+    </select>
+    <div class="hint">হাজিরা নেবার আগে Room No অবশ্যই সিলেক্ট করতে হবে। (নতুন রুম যোগ করতে চাইলে "Login" শিটের D কলামে বসিয়ে দিন — প্রতি সারিতে একটি রুম, অথবা এক সারিতে কমা দিয়ে একাধিক রুম, যেমন: 101, 102, A-Block)</div>
   </div>
 
   <div class="card">
@@ -205,7 +206,7 @@
 </div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbyJxR52JzdE0uXmg1tR2syX0nQegi_W1XVW48bls8MRxojAqbMRtQksz_THYR9EdfD91w/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxHQybcuiEb7cETJjsx1LLDZJknEkStecNk3t6KnpSUcd4aPfCIewHTlealrIfOkpJQsg/exec";
 
 let html5QrCode = null;
 let scannedCount = 0;
@@ -355,10 +356,7 @@ function resetFormFields() {
   if (attDate) attDate.value = "";
 
   const roomInput = document.getElementById("roomInput");
-  if (roomInput) roomInput.value = "";
-
-  const roomWarnHint = document.getElementById("roomWarnHint");
-  if (roomWarnHint) roomWarnHint.style.display = "none";
+  if (roomInput) roomInput.selectedIndex = 0;
 
   const rollWarnHint = document.getElementById("rollWarnHint");
   if (rollWarnHint) rollWarnHint.style.display = "none";
@@ -424,6 +422,28 @@ async function initApp() {
   // সেশন বা তারিখ পরিবর্তন হলে রিপোর্টের Room ড্রপডাউন অটো রিফ্রেশ হবে
   document.getElementById("sessionDrop").addEventListener("change", loadRoomList);
   document.getElementById("attDate").addEventListener("change", loadRoomList);
+
+  // হাজিরা নেবার Room No ড্রপডাউন পপুলেট করা — "Login" শিটের D কলামে আগে
+  // থেকে বসানো প্রি-ডিফাইনড রুম লিস্ট থেকে সার্ভার এই অপশনগুলো রিটার্ন করে
+  loadRoomOptions();
+}
+
+async function loadRoomOptions() {
+  const roomSelect = document.getElementById("roomInput");
+  try {
+    const resp = await callApi({ action: "getRoomOptions" });
+    roomSelect.innerHTML = '<option value="">-- রুম সিলেক্ট করুন --</option>';
+    if (resp.success && Array.isArray(resp.data)) {
+      resp.data.forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r; opt.text = "Room " + r;
+        roomSelect.add(opt);
+      });
+    }
+  } catch (e) {
+    console.error("Room options load failed:", e);
+    roomSelect.innerHTML = '<option value="">-- রুম লোড ব্যর্থ হয়েছে --</option>';
+  }
 }
 
 /**
@@ -628,25 +648,6 @@ function sanitizeRollInput(el) {
   const original = el.value;
   const cleaned = original.replace(/[^0-9,\s]/g, '');
   const hint = document.getElementById("rollWarnHint");
-
-  if (cleaned !== original) {
-    const cursorPos = el.selectionStart - (original.length - cleaned.length);
-    el.value = cleaned;
-    try { el.setSelectionRange(cursorPos, cursorPos); } catch (e) {}
-    if (hint) hint.style.display = "block";
-  } else if (hint) {
-    hint.style.display = "none";
-  }
-}
-
-/**
- * Room No বক্সে শুধুমাত্র ইংরেজি অক্ষর (A-Z, a-z), সংখ্যা (0-9), হাইফেন (-)
- * ও স্পেস ছাড়া অন্য কিছু (যেমন বাংলা অক্ষর) টাইপ করলে সাথে সাথে বাদ দেওয়া
- */
-function sanitizeRoomInput(el) {
-  const original = el.value;
-  const cleaned = original.replace(/[^A-Za-z0-9\-\s]/g, '');
-  const hint = document.getElementById("roomWarnHint");
 
   if (cleaned !== original) {
     const cursorPos = el.selectionStart - (original.length - cleaned.length);
