@@ -70,7 +70,7 @@
 
   .badge { font-size: 12px; padding: 2px 8px; border-radius: 20px; background: #334155; color: #cbd5e1; }
 
-  /* 🔔 কাস্টম মোডাল — নেটিভ alert()/confirm() এর বদলে, যাতে ব্রাউজারের URL/সোর্স না দেখায় */
+  /* 🔔 কাস্টম মোডাল */
   #appModalOverlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 10000;
     display: none; align-items: center; justify-content: center; padding: 20px;
@@ -86,38 +86,126 @@
   }
   #appModalOkBtn:hover { background: #2563eb; }
 
-  /* 🖨️ প্রিন্ট/PDF সেভ করার সময় শুধু রিপোর্টের কনটেন্ট (#pdfReportContent)
-     দেখাবে — বাকি পুরো অ্যাপ (স্ক্যানার, ফর্ম, বাটন ইত্যাদি) প্রিন্টে বাদ যাবে।
-     টেবিলের সেল ও পেজ মার্জিনও ছোট রাখা হয়েছে যাতে একই পেজে বেশি রোল ধরে। */
+  /* 🖨️ প্রিন্ট/PDF সেভ করার স্টাইল */
   @media print {
-    /* ডিফল্ট মার্জিন — ২য় পেজ থেকে উপরে একটু বাড়তি জায়গা (মার্জিন) রাখা হচ্ছে,
-       যাতে পেজের একদম কিনারা ঘেঁষে টেবিল শুরু না হয়ে যায়। প্রথম পেজে যেহেতু
-       আগে থেকেই হেডার ব্লক (শিরোনাম, সেশন তথ্য) থাকে, তাই সেটার মার্জিন কম রাখা হলো। */
-    @page { margin: 8mm; margin-top: 16mm; }
-    @page :first { margin-top: 8mm; }
-    body * { visibility: hidden; }
-    #pdfReportContent, #pdfReportContent * { visibility: visible; }
-    #pdfReportContent {
-      position: absolute; left: 0; top: 0; width: 100%;
-      padding: 0; border-radius: 0;
+    @page {
+      size: A4 portrait;
+      margin: 10mm 8mm;
     }
-    #pdfPreviewOverlay { position: static; background: none; }
-    #pdfAttendanceColumns { font-size: 11px; border-collapse: collapse; width: 100%; }
-    /* আসল <table>/<thead> ব্যবহার করা হয়েছে বলেই ব্রাউজার এটাকে টেবিল হিসেবে
-       ট্রিট করে — ফলে টেবিল যখন বাম কলাম থেকে ডান কলামে যায়, বা এক পেজ থেকে
-       পরের পেজে যায়, তখন thead (header row) নিজে থেকেই প্রতিবার আবার বসে যায়।
-       div দিয়ে এই রিপিট-হেডার ফিচারটা কাজ করে না, তাই <table> এ কনভার্ট করা হলো। */
-    #pdfAttendanceColumns thead { display: table-header-group; }
-    #pdfAttendanceColumns tr { break-inside: avoid; page-break-inside: avoid; }
-    #pdfAttendanceColumns th, #pdfAttendanceColumns td { padding: 2px 8px !important; white-space: nowrap; border: 1px solid #333; }
-    #pdfReportContent h2 { margin: 0 0 4px; font-size: 16px; }
-    #pdfHeaderBlock p { margin: 2px 0 !important; font-size: 12px; }
+
+    html, body {
+      background: #ffffff !important;
+      color: #000000 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      height: auto !important;
+      overflow: visible !important;
+      display: block !important;
+    }
+
+    /* মূল অ্যাপ, লগইন গেট, মোডাল ও টুলবার প্রিন্টে সম্পূর্ণ বাদ */
+    #loginGate,
+    #mainApp,
+    #appModalOverlay,
+    #pdfToolbarBar {
+      display: none !important;
+    }
+
+    /* ওভারলেকে সাধারণ প্রিন্ট ফ্লো-তে আনা এবং কালো ব্যাকগ্রাউন্ড সরানো */
+    #pdfPreviewOverlay {
+      position: static !important;
+      inset: auto !important;
+      background: #ffffff !important;
+      display: block !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      overflow: visible !important;
+      height: auto !important;
+    }
+
+    #pdfPreviewBox {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+    }
+
+    #pdfReportContent {
+      position: static !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      width: 100% !important;
+      height: auto !important;
+      box-shadow: none !important;
+    }
+
+    #pdfHeaderBlock > div {
+      margin-bottom: 10px !important;
+      padding-bottom: 6px !important;
+    }
+
+    #pdfTablesWrap {
+      margin-top: 6px !important;
+      break-inside: auto;
+    }
+
+    #pdfColumnsWrap {
+      column-count: 2 !important;
+      -webkit-column-count: 2 !important;
+      column-gap: 16px !important;
+      column-fill: auto !important;
+      -webkit-column-fill: auto !important;
+      break-after: avoid !important;
+      page-break-after: avoid !important;
+    }
+
+    #pdfAttendanceColumns {
+      font-size: 11px;
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    #pdfAttendanceColumns thead {
+      display: table-header-group;
+    }
+
+    #pdfAttendanceColumns tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    #pdfAttendanceColumns th,
+    #pdfAttendanceColumns td {
+      padding: 2px 6px !important;
+      white-space: nowrap;
+      border: 1px solid #333 !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+    }
+
+    #pdfAttendanceColumns thead th {
+      background: #f2f2f2 !important;
+    }
+
+    #pdfReportContent h2 {
+      margin: 0 0 4px !important;
+      font-size: 16px;
+      color: #000000 !important;
+    }
+
+    #pdfHeaderBlock p {
+      margin: 2px 0 !important;
+      font-size: 12px;
+      color: #000000 !important;
+    }
   }
 </style>
 </head>
 <body>
 
-<!-- 🔔 কাস্টম মোডাল — সব alert() এর বদলে এটা ব্যবহার হবে, ব্রাউজারের নিজস্ব পপআপ (যেখানে সাইটের URL দেখায়) এড়াতে -->
+<!-- 🔔 কাস্টম মোডাল -->
 <div id="appModalOverlay">
   <div id="appModalBox">
     <div id="appModalMsg"></div>
@@ -125,7 +213,7 @@
   </div>
 </div>
 
-<!-- 🔒 পাসওয়ার্ড গেট — সঠিক লগইন না দেওয়া পর্যন্ত মূল অ্যাপ হাইড থাকবে -->
+<!-- 🔒 পাসওয়ার্ড গেট -->
 <div id="loginGate" class="wrap" style="padding-top:60px;">
   <div class="card" style="max-width:340px; margin:0 auto;">
     <h2 style="text-align:center; margin-top:0;">🔒 লগইন করুন</h2>
@@ -143,7 +231,7 @@
   </div>
 </div>
 
-<!-- ✅ মূল অ্যাপ — লগইন সফল হলেই দেখা যাবে -->
+<!-- ✅ মূল অ্যাপ -->
 <div class="wrap" id="mainApp" style="display:none;">
   <div style="display:flex; justify-content:flex-end; margin-bottom:-10px;">
     <button onclick="doGateLogout()" style="background:none; border:1px solid #334155; color:#94a3b8; padding:6px 14px; border-radius:20px; font-size:12px; cursor:pointer;">🔓 লগআউট</button>
@@ -210,24 +298,12 @@ const API_URL = "https://script.google.com/macros/s/AKfycbzh0XfoR1m1QCWE9tFlpked
 
 let html5QrCode = null;
 let scannedCount = 0;
-let successMarkedCount = 0; // শুধুমাত্র নতুন/প্রকৃত সফল হাজিরার সংখ্যা (ডুপ্লিকেট বাদে)
+let successMarkedCount = 0;
 
-// প্রসেসিং অবস্থায় থাকা রোল ও শেষ স্ক্যান টাইমের রেকর্ড
 const activeProcessingRolls = new Set();
 const completedRolls = new Set();
 const scanHistoryData = [];
 
-/**
- * সার্ভারে (Google Apps Script) রিকোয়েস্ট পাঠানোর কেন্দ্রীয় ফাংশন।
- * "বারবার সংযোগ ব্যর্থ" সমস্যার প্রধান কারণ সাধারণত Apps Script-এর ধীর
- * কোল্ড-স্টার্ট বা সাময়িক নেটওয়ার্ক হিকআপ — যেটা মিলিসেকেন্ডের মধ্যেই ঠিক
- * হয়ে যায়। আগে একবার fetch ব্যর্থ হলেই সরাসরি এরর দেখানো হতো। এখন:
- *  ১. ১৫ সেকেন্ড টাইমআউট রাখা হয়েছে (AbortController দিয়ে) — যাতে অনুরোধ
- *     অনির্দিষ্টকাল আটকে না থেকে যুক্তিসঙ্গত সময়ে ব্যর্থ/সফল হয়।
- *  ২. প্রথমবার ব্যর্থ হলে সাথে সাথে হাল ছেড়ে না দিয়ে সংক্ষিপ্ত বিরতি দিয়ে
- *     সর্বোচ্চ ২ বার আবার চেষ্টা করা হয় (মোট ৩ বার পর্যন্ত), যা বেশিরভাগ
- *     সাময়িক সমস্যা নিজে থেকেই সামলে নেয়।
- */
 async function callApi(payload, maxRetries = 2) {
   const timeoutMs = 15000;
   let lastError;
@@ -250,18 +326,14 @@ async function callApi(payload, maxRetries = 2) {
       lastError = (e && e.name === "AbortError") ? new Error("Request timed out") : e;
       console.warn(`callApi attempt ${attempt + 1}/${maxRetries + 1} failed:`, lastError);
       if (attempt === maxRetries) break;
-      await new Promise(r => setTimeout(r, 700 * (attempt + 1))); // পরের চেষ্টার আগে বাড়তি অপেক্ষা
+      await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
     }
   }
   throw lastError;
 }
 
-const AUTH_KEY = "qr_scanner_auth"; // sessionStorage কী — শুধু এই ট্যাব খোলা থাকা পর্যন্ত মনে থাকবে
+const AUTH_KEY = "qr_scanner_auth";
 
-/**
- * এরর মেসেজের সাথে সংক্ষিপ্ত কারণ জুড়ে দেওয়া — যাতে "সংযোগ ব্যর্থ" বারবার
- * এলে বোঝা যায় এটা ইন্টারনেট না থাকার কারণে, নাকি সার্ভার দেরি করার কারণে।
- */
 function describeConnError(e) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return " (ইন্টারনেট সংযোগ নেই)";
   if (e && e.message === "Request timed out") return " (সার্ভার সাড়া দিতে দেরি করছে, আবার চেষ্টা করুন)";
@@ -269,7 +341,6 @@ function describeConnError(e) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  // আগে থেকে এই ট্যাবে লগইন করা থাকলে সরাসরি মূল অ্যাপ দেখানো, নাহলে লগইন গেট
   if (sessionStorage.getItem(AUTH_KEY) === "1") {
     unlockApp();
   } else {
@@ -277,14 +348,10 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById("mainApp").style.display = "none";
   }
 
-  // এন্টার প্রেস করলেও লগইন হবে
   document.getElementById("gateUser").addEventListener("keypress", e => { if (e.key === "Enter") doGateLogin(); });
   document.getElementById("gatePass").addEventListener("keypress", e => { if (e.key === "Enter") doGateLogin(); });
 });
 
-/**
- * সার্ভারে (Login শিটের বিপরীতে) ইউজারনেম/পাসওয়ার্ড যাচাই করে গেট খোলা
- */
 async function doGateLogin() {
   const user = document.getElementById("gateUser").value.trim();
   const pass = document.getElementById("gatePass").value;
@@ -333,7 +400,6 @@ function doGateLogout() {
   resetScanState();
   resetFormFields();
 
-  // খোলা থাকলে রিপোর্ট প্রিভিউ ও কাস্টম মোডাল বন্ধ করা
   const existingPreview = document.getElementById("pdfPreviewOverlay");
   if (existingPreview) existingPreview.remove();
   closeAppModal();
@@ -344,10 +410,6 @@ function doGateLogout() {
   document.getElementById("gatePass").value = "";
 }
 
-/**
- * সেশন/তারিখ/রুম ইনপুট ও রিপোর্টের Room ড্রপডাউন সহ সব ফর্ম-ফিল্ড রিসেট করা।
- * লগআউটের সময় কল হয়, যাতে আগের ইনভিজিলেটরের সিলেকশন পরের লগইনে দেখা না যায়।
- */
 function resetFormFields() {
   const sessionDrop = document.getElementById("sessionDrop");
   if (sessionDrop) sessionDrop.selectedIndex = 0;
@@ -366,17 +428,12 @@ function resetFormFields() {
 }
 
 function unlockApp() {
-  resetScanState(); // নতুন লগইনে আগের স্ক্যান হিস্ট্রি/কাউন্ট যেন বহন না হয়ে আসে
+  resetScanState();
   document.getElementById("loginGate").style.display = "none";
   document.getElementById("mainApp").style.display = "block";
   initApp();
 }
 
-/**
- * স্ক্যান-সম্পর্কিত সব ইন-মেমোরি স্টেট (লগ, সফল/ডুপ্লিকেট রোল সেট, কাউন্টার,
- * ম্যানুয়াল ইনপুট) রিসেট করা। লগআউট বা নতুন লগইনের সময় কল হয়, যাতে আগের
- * সেশনের হিস্ট্রি নতুন সেশনে দেখা না যায়।
- */
 function resetScanState() {
   completedRolls.clear();
   activeProcessingRolls.clear();
@@ -419,12 +476,9 @@ async function initApp() {
     console.error(e);
   }
 
-  // সেশন বা তারিখ পরিবর্তন হলে রিপোর্টের Room ড্রপডাউন অটো রিফ্রেশ হবে
   document.getElementById("sessionDrop").addEventListener("change", loadRoomList);
   document.getElementById("attDate").addEventListener("change", loadRoomList);
 
-  // হাজিরা নেবার Room No ড্রপডাউন পপুলেট করা — "Login" শিটের D কলামে আগে
-  // থেকে বসানো প্রি-ডিফাইনড রুম লিস্ট থেকে সার্ভার এই অপশনগুলো রিটার্ন করে
   loadRoomOptions();
 }
 
@@ -446,10 +500,6 @@ async function loadRoomOptions() {
   }
 }
 
-/**
- * নির্বাচিত সেশন ও তারিখের জন্য শিটে যেসব Room No তে হাজিরা নেওয়া হয়েছে
- * সেগুলো সার্ভার থেকে এনে "রিপোর্ট" এর Room ড্রপডাউনে বসানো, "All Room" সহ।
- */
 async function loadRoomList() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
@@ -516,11 +566,6 @@ function stopScanner() {
   }
 }
 
-/**
- * সার্ভার থেকে আসা রোল লিস্টে (successRolls/duplicateRolls/notFoundRolls) কোনো
- * নির্দিষ্ট রোল আছে কিনা যাচাই করা — আগে স্ট্রিং হিসেবে, না মিললে সংখ্যা হিসেবে
- * (যেমন "012" বনাম "12" এর মতো ফরম্যাটিং ভিন্নতা থাকলেও সঠিকভাবে মিলবে)
- */
 function rollMatches(list, roll) {
   if (!list || !Array.isArray(list)) return false;
   if (list.includes(roll)) return true;
@@ -552,27 +597,21 @@ function extractRollNumber(decodedText) {
   return text;
 }
 
-/**
- * ⚡ দ্রুত অটোমেটিক স্ক্যান লজিক (Camera Pause হবে না)
- */
 function onScanSuccess(decodedText) {
   const roll = extractRollNumber(decodedText);
 
   if (!roll) return;
 
-  // ১. যদি ইতোমধ্যে সফল হাজিরা দেওয়া হয়ে থাকে
   if (completedRolls.has(roll)) {
     beepError();
     showStatus(`⚠️ রোল ${roll} ইতিমধ্যে স্ক্যান করা হয়েছে!`, "warn");
     return;
   }
 
-  // ২. যদি ব্যাকগ্রাউন্ডে প্রসেসিং অবস্থায় থাকে
   if (activeProcessingRolls.has(roll)) {
-    return; 
+    return;
   }
 
-  // প্রসেসিং সেটে রোলটি মার্ক করা
   activeProcessingRolls.add(roll);
   beep();
 
@@ -582,14 +621,13 @@ function onScanSuccess(decodedText) {
 
   showStatus("⏳ রোল " + roll + " প্রসেস হচ্ছে...", "info");
 
-  // ব্যাকগ্রাউন্ডে অটো প্রসেস করা (ক্যামেরা চালু থাকবে)
   processAttendanceAsync(roll, session, date, room);
 }
 
 async function processAttendanceAsync(roll, session, date, room) {
   try {
     const resp = await callApi({ action: "markAttendance", roll: roll, session: session, date: date, room: room });
-    
+
     if (resp.success) {
       const data = resp.data;
 
@@ -600,13 +638,13 @@ async function processAttendanceAsync(roll, session, date, room) {
       } else if (rollMatches(data.successRolls, roll)) {
         completedRolls.add(roll);
         successMarkedCount++;
-        
+
         const scanTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         scanHistoryData.push({ roll: roll, time: scanTime, status: "সফল" });
 
         addLog(roll, "✅ হাজিরা সম্পন্ন — রোল " + roll, "ok");
         showStatus("✅ রোল " + roll + " — হাজিরা সফল হয়েছে", "ok");
-        loadRoomList(); // নতুন রুমের ডেটা তৈরি হলে রিপোর্টের Room dropdown রিফ্রেশ করা
+        loadRoomList();
       } else if (rollMatches(data.duplicateRolls, roll)) {
         completedRolls.add(roll);
         addLog(roll, "⚠️ ইতিমধ্যে হাজিরা দেওয়া হয়েছে — রোল " + roll, "warn");
@@ -635,15 +673,10 @@ async function processAttendanceAsync(roll, session, date, room) {
     showStatus("❌ সংযোগ ব্যর্থ হয়েছে" + describeConnError(e), "err");
     beepError();
   } finally {
-    // প্রসেসিং শেষ হলে থ্রোটল সেট থেকে সরিয়ে দেওয়া
     activeProcessingRolls.delete(roll);
   }
 }
 
-/**
- * রোল টেক্সটবক্সে শুধু ইংরেজি সংখ্যা (0-9), কমা ও স্পেস ছাড়া অন্য কিছু
- * (যেমনঃ বাংলা সংখ্যা ০-৯ বা অন্য কোনো ভাষার অক্ষর) টাইপ করলে সাথে সাথে বাদ দেওয়া
- */
 function sanitizeRollInput(el) {
   const original = el.value;
   const cleaned = original.replace(/[^0-9,\s]/g, '');
@@ -659,18 +692,12 @@ function sanitizeRollInput(el) {
   }
 }
 
-/**
- * কমা দিয়ে আলাদা করা রোল স্ট্রিং থেকে পরিষ্কার (trim করা) রোল লিস্ট বের করা
- */
 function parseRollString(str) {
   return str.toString().split(',')
     .map(r => r.trim())
     .filter(r => r !== "");
 }
 
-/**
- * ✍️ ম্যানুয়াল রোল এন্ট্রি সাবমিট (স্ক্যান ছাড়া হাজিরা, ডুপ্লিকেট ডিটেক্ট সহ)
- */
 async function submitManualRolls() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
@@ -688,7 +715,6 @@ async function submitManualRolls() {
     return;
   }
 
-  // যেসব রোল এই সেশনে ইতিমধ্যে (QR বা ম্যানুয়ালি) সফল হয়েছে সেগুলো লোকালি বাদ দেওয়া
   const toSend = [];
   const alreadyDone = [];
   rolls.forEach(r => {
@@ -755,7 +781,7 @@ async function submitManualRolls() {
         if (hasIssue) beepError(); else beep();
 
         if (successRolls.length > 0) {
-          loadRoomList(); // নতুন রুমের ডেটা তৈরি হলে রিপোর্টের Room dropdown রিফ্রেশ করা
+          loadRoomList();
         }
 
         document.getElementById("manualRolls").value = "";
@@ -801,10 +827,6 @@ function addLog(roll, text, type) {
   log.prepend(item);
 }
 
-/**
- * 🔔 কাস্টম মোডাল দেখানো — ব্রাউজারের নেটিভ alert() এর বদলে, যাতে
- * "script.google.com says" এর মতো সোর্স/URL না দেখায়
- */
 function showAppModal(message) {
   document.getElementById("appModalMsg").innerText = message;
   document.getElementById("appModalOverlay").style.display = "flex";
@@ -840,12 +862,6 @@ function beepError() {
   } catch (e) {}
 }
 
-/**
- * 📄 রিপোর্ট বাটনে ক্লিক করলে প্রথমে একটি প্রিভিউ (ভিউ) দেখানো হয়,
- * তারপর সেই পেজেই "PDF ডাউনলোড করুন" বাটন থাকবে — যেটাতে ইউজার নিজে ক্লিক
- * করলে তবেই ডাউনলোড শুরু হবে। এখন সাথে Room No অনুযায়ীও ফিল্টার করা যায়
- * ("সকল রুম" অথবা নির্দিষ্ট একটি রুম)।
- */
 async function generatePDF() {
   const session = document.getElementById("sessionDrop").value;
   const date = document.getElementById("attDate").value;
@@ -886,21 +902,12 @@ async function generatePDF() {
   }
 }
 
-/**
- * রিপোর্টের প্রিভিউ (ফুল-স্ক্রিন ওভারলে) দেখানো — এখানে সাধারণ HTML হিসেবেই
- * রিপোর্টটি রেন্ডার হয় (তাই বাংলা ফন্ট স্বাভাবিকভাবেই দেখাবে)। উপরে শুধু একটি
- * "📥 Click to Download PDF / Print" বাটন থাকে — ক্লিক করলে সরাসরি window.print()
- * কল হয়ে ব্রাউজারের প্রিন্ট ডায়ালগ খোলে, যেখান থেকে "Save as PDF" সিলেক্ট করা
- * যায়। আলাদা কোনো "ডাউনলোড" বা "বন্ধ করুন" বাটন নেই — ওভারলের বাইরে ক্লিক করলে
- * বা Escape চাপলে প্রিভিউ বন্ধ হয়ে যাবে। এখন রুম নম্বরও দেখানো হয়।
- */
 function showReportPreview(session, date, records, room) {
   const existing = document.getElementById("pdfPreviewOverlay");
   if (existing) existing.remove();
 
   const roomLabel = (!room || room === "All") ? "সকল রুম (All Room)" : ("Room " + room);
 
-  // গ্রুপ অনুযায়ী উপস্থিতি গণনা (বিজ্ঞান, ব্যবসায় শিক্ষা, মানবিক ইত্যাদি)
   const groupCounts = {};
   records.forEach(item => {
     const g = (item.group || '').toString().trim() || 'অনির্ধারিত';
@@ -915,16 +922,12 @@ function showReportPreview(session, date, records, room) {
       delete groupCounts[g];
     }
   });
-  // preferredOrder-এ নেই এমন কোনো গ্রুপ ডেটায় থাকলে সেগুলোও দেখানো
   Object.keys(groupCounts).forEach(g => {
     groupSummaryHtml += `<p style="margin:4px 0;"><strong>${g}:</strong> ${groupCounts[g]} জন</p>`;
   });
 
-  // রুম অনুযায়ী উপস্থিতি গণনা (কোন রুমে কতজন, এবং সেই রুমে কোন গ্রুপের কতজন)
-  // All Room বাছাই করলে প্রতিটি রুমের আলাদা সংখ্যা দেখাবে, নির্দিষ্ট রুম
-  // বাছাই করলে শুধু ঐ রুমেরটাই আসবে
   const roomCounts = {};
-  const roomGroupCounts = {}; // { room: { group: count } }
+  const roomGroupCounts = {};
   records.forEach(item => {
     const r = (item.room || '').toString().trim() || 'অনির্ধারিত';
     const g = (item.group || '').toString().trim() || 'অনির্ধারিত';
@@ -950,19 +953,7 @@ function showReportPreview(session, date, records, room) {
     roomSummaryHtml += `<p style="margin:4px 0;"><strong>Room ${r}:</strong> ${roomCounts[r]} জন${groupDetail}</p>`;
   });
 
-  // টেবিলে গ্রুপ ও স্ট্যাটাস কলাম রাখা হচ্ছে না (এগুলো সামারিতে আগে থেকেই আছে)।
-  // পুরো তালিকাটা একটাই ধারাবাহিক (continuous) দুই-কলাম CSS লেআউটে (column-count:2)
-  // বসানো হচ্ছে — এতে ব্রাউজার নিজেই প্রথমে বাম কলাম পুরোপুরি ভরে, তারপর একই
-  // পেজের ডান কলামে চলে যায়, আর ডান কলামও শেষ হয়ে গেলে পরবর্তী পেজের বাম
-  // কলাম থেকে বাকি অংশ শুরু হয় — সিরিয়াল নম্বরও পুরো তালিকা জুড়ে ধারাবাহিক
-  // থাকে (আলাদা করে দুই ভাগে ভাগ করার দরকার নেই)।
   function buildAttendanceColumns(recordsList) {
-    // আগে div দিয়ে flex-row বানানো হতো, যেটা "column-count:2" এর সাথে দেখতে
-    // টেবিলের মতো লাগলেও আসলে ব্রাউজারের কাছে টেবিল ছিল না — তাই বাম কলাম থেকে
-    // ডান কলামে বা এক পেজ থেকে পরের পেজে গেলে হেডার রো (ক্রমিক/রোল/নাম/রুম)
-    // আবার বসতো না। এখন আসল <table> + <thead> ব্যবহার করা হচ্ছে, কারণ থেড
-    // (thead) হলো একমাত্র জিনিস যেটা ব্রাউজার নিজে থেকেই প্রতিটা কলাম-ব্রেক ও
-    // পেজ-ব্রেকে পুনরায় বসিয়ে দেয় (table-header-group ফ্র্যাগমেন্টেশন ফিচার)।
     const headerRow = `
       <thead>
         <tr class="attHeaderRow" style="background:#f2f2f2; font-weight:bold;">
@@ -985,7 +976,7 @@ function showReportPreview(session, date, records, room) {
       `;
     });
     return `
-      <div style="column-count:2; -webkit-column-count:2; column-gap:24px; column-fill:auto; -webkit-column-fill:auto;">
+      <div id="pdfColumnsWrap" style="column-count:2; -webkit-column-count:2; column-gap:24px; column-fill:auto; -webkit-column-fill:auto;">
         <table id="pdfAttendanceColumns" style="border-collapse:collapse; width:100%;">
           ${headerRow}
           <tbody>${rows}</tbody>
@@ -1009,7 +1000,7 @@ function showReportPreview(session, date, records, room) {
       <div id="pdfReportContent" style="background:#ffffff; color:#000000; padding:24px; border-radius:0 0 12px 12px; font-family:'SolaimanLipi', Arial, sans-serif;">
         <div id="pdfHeaderBlock">
           <h2 style="text-align:center; margin-bottom:5px; color:#000;">📋 হাজিরা রিপোর্ট</h2>
-          <div style="margin-bottom:20px; border-bottom:2px solid #000; padding-bottom:10px;">
+          <div style="margin-bottom:14px; border-bottom:2px solid #000; padding-bottom:8px;">
             <p style="margin:4px 0;"><strong>সেশন:</strong> ${session}</p>
             <p style="margin:4px 0;"><strong>তারিখ:</strong> ${date}</p>
             <p style="margin:4px 0;"><strong>রুম:</strong> ${roomLabel}</p>
@@ -1019,7 +1010,7 @@ function showReportPreview(session, date, records, room) {
             ${roomSummaryHtml}
           </div>
         </div>
-        <div id="pdfTablesWrap" style="margin-top:10px;">
+        <div id="pdfTablesWrap" style="margin-top:8px;">
           ${attendanceColumnsHtml}
         </div>
       </div>
@@ -1028,7 +1019,6 @@ function showReportPreview(session, date, records, room) {
 
   document.body.appendChild(overlay);
 
-  // ওভারলের বাইরে (কালো ব্যাকগ্রাউন্ডে) ক্লিক করলে বা Escape চাপলে প্রিভিউ বন্ধ হবে
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
   });
@@ -1043,24 +1033,24 @@ function showReportPreview(session, date, records, room) {
   document.getElementById("pdfBackBtn").onclick = () => overlay.remove();
 
   document.getElementById("pdfPrintBtn").onclick = () => {
-    // 🖨️ ওভারলে তৈরি করার সময় ইনলাইন style দিয়ে position:fixed ও কালো
-    // ব্যাকগ্রাউন্ড বসানো হয়েছিল — সেই ইনলাইন style, স্টাইলশিটের @media print
-    // রুলের চেয়ে স্পেসিফিসিটিতে এগিয়ে থাকে বলে সেটাই থেকে যাচ্ছিল। ফলে Chrome
-    // ফিক্সড-পজিশনড এলিমেন্টকে প্রতি পেজে বারবার প্রিন্ট করছিল — এই কারণেই
-    // তালিকা দুইবার আসা এবং ডানপাশে কালো অংশ দেখা যাচ্ছিল। এখানে সেই একই
-    // ইনলাইন style-টাই সরাসরি জাভাস্ক্রিপ্ট দিয়ে সাময়িকভাবে বদলে দেওয়া হচ্ছে
-    // (যেটা ঠিক ততটাই স্পেসিফিক, তাই নিশ্চিতভাবে কাজ করবে), প্রিন্ট শেষে আগের
-    // অবস্থায় ফিরিয়ে আনা হচ্ছে।
     const originalOverlayCss = overlay.style.cssText;
-    overlay.style.cssText = 'position:static; background:transparent; z-index:9999; padding:0; display:block;';
+    const originalBodyCss = document.body.style.cssText;
 
-    const restoreOverlay = () => {
+    overlay.style.cssText = 'position:static; inset:auto; background:#ffffff; z-index:9999; padding:0; margin:0; display:block; overflow:visible; height:auto;';
+    document.body.style.cssText = 'background:#ffffff; margin:0; padding:0; display:block; height:auto; overflow:visible;';
+
+    const restoreAfterPrint = () => {
       overlay.style.cssText = originalOverlayCss;
-      window.removeEventListener('afterprint', restoreOverlay);
+      document.body.style.cssText = originalBodyCss;
+      window.removeEventListener('afterprint', restoreAfterPrint);
     };
-    window.addEventListener('afterprint', restoreOverlay);
 
-    window.print();
+    window.addEventListener('afterprint', restoreAfterPrint);
+
+    setTimeout(() => {
+      window.print();
+      setTimeout(restoreAfterPrint, 1000);
+    }, 50);
   };
 }
 
