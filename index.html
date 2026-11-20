@@ -70,7 +70,7 @@
 
   .badge { font-size: 12px; padding: 2px 8px; border-radius: 20px; background: #334155; color: #cbd5e1; }
 
-  /* 🔔 কাস্টম মোডাল */
+  /* 🔔 কাস্টম মোডাল — নেটিভ alert()/confirm() এর বদলে, যাতে ব্রাউজারের URL/সোর্স না দেখায় */
   #appModalOverlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 10000;
     display: none; align-items: center; justify-content: center; padding: 20px;
@@ -86,12 +86,12 @@
   }
   #appModalOkBtn:hover { background: #2563eb; }
 
-  /* 🖨️ প্রিন্ট/PDF সেভ করার স্টাইল */
+  /* 🖨️ প্রিন্ট/PDF সেভ করার সময় শুধু রিপোর্টের কনটেন্ট (#pdfReportContent)
+     দেখাবে — বাকি পুরো অ্যাপ প্রিন্টে সম্পূর্ণ বাদ যাবে এবং Background Graphics
+     অন থাকলেও ব্যাকগ্রাউন্ড সাদা থাকবে ও অতিরিক্ত খালি পেজ আসবে না। */
   @media print {
-    @page {
-      size: A4 portrait;
-      margin: 10mm 8mm;
-    }
+    @page { margin: 8mm; margin-top: 16mm; }
+    @page :first { margin-top: 8mm; }
 
     html, body {
       background: #ffffff !important;
@@ -103,7 +103,7 @@
       display: block !important;
     }
 
-    /* মূল অ্যাপ, লগইন গেট, মোডাল ও টুলবার প্রিন্টে সম্পূর্ণ বাদ */
+    /* মূল অ্যাপ ও মোডালগুলো প্রিন্টে সম্পূর্ণ হাইড (visibility:hidden এর বদলে display:none, যাতে খালি পেজ না আসে) */
     #loginGate,
     #mainApp,
     #appModalOverlay,
@@ -111,7 +111,6 @@
       display: none !important;
     }
 
-    /* ওভারলেকে সাধারণ প্রিন্ট ফ্লো-তে আনা এবং কালো ব্যাকগ্রাউন্ড সরানো */
     #pdfPreviewOverlay {
       position: static !important;
       inset: auto !important;
@@ -133,73 +132,34 @@
       position: static !important;
       background: #ffffff !important;
       color: #000000 !important;
+      width: 100% !important;
       padding: 0 !important;
       margin: 0 !important;
       border-radius: 0 !important;
-      width: 100% !important;
       height: auto !important;
       box-shadow: none !important;
     }
 
-    #pdfHeaderBlock > div {
-      margin-bottom: 10px !important;
-      padding-bottom: 6px !important;
-    }
-
-    #pdfTablesWrap {
-      margin-top: 6px !important;
-      break-inside: auto;
-    }
-
     #pdfColumnsWrap {
-      column-count: 2 !important;
-      -webkit-column-count: 2 !important;
-      column-gap: 16px !important;
-      column-fill: auto !important;
-      -webkit-column-fill: auto !important;
       break-after: avoid !important;
       page-break-after: avoid !important;
     }
 
-    #pdfAttendanceColumns {
-      font-size: 11px;
-      border-collapse: collapse;
-      width: 100%;
-    }
-
-    #pdfAttendanceColumns thead {
-      display: table-header-group;
-    }
-
-    #pdfAttendanceColumns tr {
-      break-inside: avoid;
-      page-break-inside: avoid;
-    }
-
-    #pdfAttendanceColumns th,
-    #pdfAttendanceColumns td {
-      padding: 2px 6px !important;
+    #pdfAttendanceColumns { font-size: 11px; border-collapse: collapse; width: 100%; }
+    #pdfAttendanceColumns thead { display: table-header-group; }
+    #pdfAttendanceColumns tr { break-inside: avoid; page-break-inside: avoid; }
+    #pdfAttendanceColumns th, #pdfAttendanceColumns td {
+      padding: 2px 8px !important;
       white-space: nowrap;
-      border: 1px solid #333 !important;
+      border: 1px solid #333;
       background: #ffffff !important;
       color: #000000 !important;
     }
-
     #pdfAttendanceColumns thead th {
       background: #f2f2f2 !important;
     }
-
-    #pdfReportContent h2 {
-      margin: 0 0 4px !important;
-      font-size: 16px;
-      color: #000000 !important;
-    }
-
-    #pdfHeaderBlock p {
-      margin: 2px 0 !important;
-      font-size: 12px;
-      color: #000000 !important;
-    }
+    #pdfReportContent h2 { margin: 0 0 4px; font-size: 16px; color: #000000 !important; }
+    #pdfHeaderBlock p { margin: 2px 0 !important; font-size: 12px; color: #000000 !important; }
   }
 </style>
 </head>
@@ -1000,7 +960,7 @@ function showReportPreview(session, date, records, room) {
       <div id="pdfReportContent" style="background:#ffffff; color:#000000; padding:24px; border-radius:0 0 12px 12px; font-family:'SolaimanLipi', Arial, sans-serif;">
         <div id="pdfHeaderBlock">
           <h2 style="text-align:center; margin-bottom:5px; color:#000;">📋 হাজিরা রিপোর্ট</h2>
-          <div style="margin-bottom:14px; border-bottom:2px solid #000; padding-bottom:8px;">
+          <div style="margin-bottom:20px; border-bottom:2px solid #000; padding-bottom:10px;">
             <p style="margin:4px 0;"><strong>সেশন:</strong> ${session}</p>
             <p style="margin:4px 0;"><strong>তারিখ:</strong> ${date}</p>
             <p style="margin:4px 0;"><strong>রুম:</strong> ${roomLabel}</p>
@@ -1010,7 +970,7 @@ function showReportPreview(session, date, records, room) {
             ${roomSummaryHtml}
           </div>
         </div>
-        <div id="pdfTablesWrap" style="margin-top:8px;">
+        <div id="pdfTablesWrap" style="margin-top:10px;">
           ${attendanceColumnsHtml}
         </div>
       </div>
@@ -1039,17 +999,16 @@ function showReportPreview(session, date, records, room) {
     overlay.style.cssText = 'position:static; inset:auto; background:#ffffff; z-index:9999; padding:0; margin:0; display:block; overflow:visible; height:auto;';
     document.body.style.cssText = 'background:#ffffff; margin:0; padding:0; display:block; height:auto; overflow:visible;';
 
-    const restoreAfterPrint = () => {
+    const restoreOverlay = () => {
       overlay.style.cssText = originalOverlayCss;
       document.body.style.cssText = originalBodyCss;
-      window.removeEventListener('afterprint', restoreAfterPrint);
+      window.removeEventListener('afterprint', restoreOverlay);
     };
-
-    window.addEventListener('afterprint', restoreAfterPrint);
+    window.addEventListener('afterprint', restoreOverlay);
 
     setTimeout(() => {
       window.print();
-      setTimeout(restoreAfterPrint, 1000);
+      setTimeout(restoreOverlay, 1000);
     }, 50);
   };
 }
